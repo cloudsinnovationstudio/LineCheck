@@ -171,6 +171,14 @@
             "Absolut Raspberri": [
                 { id: 'raspberryDaisyKilner', name: 'Raspberry Daisy Kilner' },
                 { id: 'raspberryDaisyBtl', name: 'Raspberry Daisy BTL' }
+            ],
+            "Blend Passionfruit": [
+                { id: 'pergolaKilner', name: 'Pergola Punch Batch Kilner' },
+                { id: 'pergolaBtl', name: 'Pergola Punch Batch BTL' }
+            ],
+            "Creme de Mure": [
+                { id: 'raspberryDaisyKilner', name: 'Raspberry Daisy Kilner' },
+                { id: 'raspberryDaisyBtl', name: 'Raspberry Daisy BTL' }
             ]
         };
         const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
@@ -318,12 +326,18 @@
                     total += (btlInput * 700 * (7 / 12)) / 700;
                     total += (strawberryInput * 10000 * (350 / 2350)) / 700;
                     total += (pinaInput * 10000 * (350 / 2350)) / 700;
-                } else if (product.name === "Absolut Raspberri") {
+                } else if (product.name === "Absolut Raspberri" || product.name === "Creme de Mure") {
                     const kilnerInput = Number(specials.raspberryDaisyKilner) || 0;
                     const btlInput = Number(specials.raspberryDaisyBtl) || 0;
                     
                     total += (kilnerInput * 8400 * (7 / 12)) / 700;
                     total += (btlInput * 700 * (7 / 12)) / 700;
+                } else if (product.name === "Blend Passionfruit") {
+                    const kilnerInput = Number(specials.pergolaKilner) || 0;
+                    const btlInput = Number(specials.pergolaBtl) || 0;
+
+                    total += (kilnerInput * 8400 * (5 / 12)) / 700;
+                    total += (btlInput * 700 * (5 / 12)) / 700;
                 }
             }
             
@@ -537,4 +551,4 @@
         main();
     </script>
 </body>
-</ht
+</html>
