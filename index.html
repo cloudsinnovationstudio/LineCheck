@@ -46,7 +46,6 @@
         .summary-table tr:nth-child(even) {
             background-color: #f9f9f9;
         }
-        /* Styles for the login overlay */
         #login-overlay {
             position: fixed;
             top: 0;
@@ -63,7 +62,6 @@
 </head>
 <body class="bg-gray-100 text-gray-800">
 
-    <!-- Secure Login Overlay -->
     <div id="login-overlay">
         <div class="bg-white p-8 rounded-lg shadow-xl text-center w-full max-w-sm">
             <h2 class="text-xl font-bold mb-4">Bar Stock Login</h2>
@@ -74,7 +72,7 @@
         </div>
     </div>
 
-    <div id="app" class="max-w-4xl mx-auto p-4" style="display: none;"> <!-- Main app is hidden initially -->
+    <div id="app" class="max-w-4xl mx-auto p-4" style="display: none;">
         
         <header class="bg-white rounded-lg shadow p-4 mb-6">
             <div class="flex justify-between items-center">
@@ -82,9 +80,9 @@
                 <button id="logout-button" class="bg-red-500 text-white px-3 py-1 rounded-md shadow hover:bg-red-600 text-sm">Logout</button>
             </div>
             <nav id="nav-buttons" class="flex justify-center space-x-2 mt-4">
-                <button data-view="input" class="nav-button bg-blue-500 text-white px-4 py-2 rounded-md shadow hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75">Input</button>
-                <button data-view="view" class="nav-button bg-gray-500 text-white px-4 py-2 rounded-md shadow hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75">View</button>
-                <button data-view="configure" class="nav-button bg-gray-500 text-white px-4 py-2 rounded-md shadow hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75">Configure</button>
+                <button data-view="input" class="nav-button bg-blue-500 text-white px-4 py-2 rounded-md shadow">Input</button>
+                <button data-view="view" class="nav-button bg-gray-500 text-white px-4 py-2 rounded-md shadow">View</button>
+                <button data-view="configure" class="nav-button bg-gray-500 text-white px-4 py-2 rounded-md shadow">Configure</button>
             </nav>
         </header>
 
@@ -97,7 +95,6 @@
 
     </div>
 
-    <!-- Templates for different views -->
     <template id="input-view-template">
         <div id="input-view" class="space-y-6">
             <div class="bg-white p-4 rounded-lg shadow space-y-4">
@@ -110,7 +107,7 @@
                     <select id="product-selector" class="flex-grow p-2 border rounded-md shadow-sm"></select>
                 </div>
             </div>
-            <div id="product-input-container" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+            <div id="product-input-container"></div>
         </div>
     </template>
 
@@ -156,11 +153,25 @@
         let currentView = 'input';
         let viewPageMode = 'daily';
         let selectedProductId = null;
-        const locations = [
+        const locations = [const firebaseConfig = {
+  apiKey: "AIzaSyDTTRoipMen2gSn8s602nV_Ao_9MogDUK4",
+  authDomain: "linecheck-84928.firebaseapp.com",
+  projectId: "linecheck-84928",
+  storageBucket: "linecheck-84928.firebasestorage.app",
+  messagingSenderId: "348317364563",
+  appId: "1:348317364563:web:2d0e8bec52d5323ca0b1a6"
+};
             { id: 'islandBar', name: 'Island Bar' },
             { id: 'mainBar', name: 'Main Bar' },
             { id: 'coldRoom', name: 'Cold Room' },
             { id: 'kegRoom', name: 'Keg Room' }
+        ];
+        const specialProductName = "Ron Santiago 8YO";
+        const specialInputs = [
+            { id: 'pergolaKilner', name: 'Pergola Punch Batch Kilner' },
+            { id: 'pergolaBtl', name: 'Pergola Punch Batch BTL' },
+            { id: 'strawberrySlushie', name: 'Strawberry Daquiri Slushie' },
+            { id: 'pinaColadaSlushie', name: 'Pina Colada Slushie' }
         ];
         const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
         let currentDay = days[(new Date().getDay() + 6) % 7];
@@ -169,12 +180,10 @@
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
-
             onAuthStateChanged(auth, (user) => {
                 const loginOverlay = document.getElementById('login-overlay');
                 const appContainer = document.getElementById('app');
                 if (user) {
-                    // User is signed in
                     userId = user.uid;
                     loginOverlay.style.display = 'none';
                     appContainer.style.display = 'block';
@@ -182,12 +191,10 @@
                     setupGlobalEventListeners();
                     setupListeners();
                 } else {
-                    // User is signed out
                     loginOverlay.style.display = 'flex';
                     appContainer.style.display = 'none';
                 }
             });
-            
             setupLogin();
         }
 
@@ -197,49 +204,31 @@
             const loginSubmit = document.getElementById('login-submit');
             const loginError = document.getElementById('login-error');
             const logoutButton = document.getElementById('logout-button');
-
             const handleLogin = async () => {
                 loginError.textContent = '';
                 try {
                     await signInWithEmailAndPassword(auth, emailInput.value, passwordInput.value);
-                    // onAuthStateChanged will handle showing the app
                 } catch (error) {
-                    console.error("Login failed:", error.message);
-                    loginError.textContent = 'Login failed. Please check email and password.';
+                    loginError.textContent = 'Login failed. Please check credentials.';
                 }
             };
-
             loginSubmit.addEventListener('click', handleLogin);
-            passwordInput.addEventListener('keyup', (e) => {
-                if (e.key === 'Enter') handleLogin();
-            });
-            
-            logoutButton.addEventListener('click', async () => {
-                try {
-                    await signOut(auth);
-                    // onAuthStateChanged will handle showing the login screen
-                } catch (error) {
-                    console.error("Logout failed:", error);
-                }
-            });
+            passwordInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') handleLogin(); });
+            logoutButton.addEventListener('click', async () => { await signOut(auth); });
         }
-
 
         function setupListeners() {
             onSnapshot(collection(db, `artifacts/${appId}/public/data/products`), (snapshot) => {
                 products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 products.sort((a, b) => a.name.localeCompare(b.name));
-                if (selectedProductId === null && products.length > 0) {
-                    selectedProductId = products[0].id;
-                }
+                if (!selectedProductId && products.length > 0) selectedProductId = products[0].id;
                 render();
-            }, (error) => console.error("Error fetching products:", error));
-
+            });
             onSnapshot(collection(db, `artifacts/${appId}/public/data/counts`), (snapshot) => {
                 counts = {};
                 snapshot.docs.forEach(doc => { counts[doc.id] = doc.data(); });
                 render();
-            }, (error) => console.error("Error fetching counts:", error));
+            });
         }
 
         function render() {
@@ -249,33 +238,11 @@
                 mainContent.removeChild(mainContent.lastChild);
             }
             switch (currentView) {
-                case 'input':
-                    mainContent.appendChild(document.getElementById('input-view-template').content.cloneNode(true));
-                    renderInputView();
-                    break;
-                case 'view':
-                    mainContent.appendChild(document.getElementById('view-view-template').content.cloneNode(true));
-                    renderViewView();
-                    break;
-                case 'configure':
-                    mainContent.appendChild(document.getElementById('configure-view-template').content.cloneNode(true));
-                    renderConfigureView();
-                    break;
+                case 'input': mainContent.appendChild(document.getElementById('input-view-template').content.cloneNode(true)); renderInputView(); break;
+                case 'view': mainContent.appendChild(document.getElementById('view-view-template').content.cloneNode(true)); renderViewView(); break;
+                case 'configure': mainContent.appendChild(document.getElementById('configure-view-template').content.cloneNode(true)); renderConfigureView(); break;
             }
             updateNavButtons();
-        }
-
-        function renderDaySelector(containerId) {
-            const selector = document.getElementById(containerId);
-            if (!selector) return;
-            selector.innerHTML = '';
-            days.forEach(day => {
-                const option = document.createElement('option');
-                option.value = day;
-                option.textContent = day.charAt(0).toUpperCase() + day.slice(1);
-                selector.appendChild(option);
-            });
-            selector.value = currentDay;
         }
 
         function renderInputView() {
@@ -285,109 +252,122 @@
             if (!productSelector || !container) return;
 
             productSelector.innerHTML = '<option value="">Select a product...</option>';
-            products.forEach(product => {
-                const option = document.createElement('option');
-                option.value = product.id;
-                option.textContent = product.name;
-                productSelector.appendChild(option);
-            });
+            products.forEach(p => productSelector.add(new Option(p.name, p.id)));
             productSelector.value = selectedProductId;
-
             container.innerHTML = '';
+
             if (!selectedProductId) {
-                container.innerHTML = `<p class="md:col-span-2 text-center p-4 bg-white rounded-lg shadow">Please select a product to enter counts.</p>`;
+                container.innerHTML = `<p class="text-center p-4 bg-white rounded-lg shadow">Please select a product.</p>`;
                 return;
             }
 
+            const selectedProduct = products.find(p => p.id === selectedProductId);
+            const isSpecialProduct = selectedProduct && selectedProduct.name === specialProductName;
+
+            const standardContainer = document.createElement('div');
+            standardContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
             locations.forEach(location => {
-                const locationEl = document.createElement('div');
-                locationEl.className = 'bg-white rounded-lg shadow p-6';
-                locationEl.innerHTML = `<h3 class="text-lg font-bold mb-4">${location.name}</h3><div class="space-y-3"></div>`;
-                const productContainer = locationEl.querySelector('.space-y-3');
                 const count = counts[selectedProductId]?.[currentDay]?.[location.id] || 0;
-                const productRow = document.createElement('div');
-                productRow.className = 'flex items-center justify-between';
-                productRow.innerHTML = `
-                    <label for="${location.id}-${selectedProductId}" class="text-sm">Count</label>
-                    <input type="number" id="${location.id}-${selectedProductId}" data-product-id="${selectedProductId}" data-location-id="${location.id}" value="${count}" class="count-input w-20 p-1 border rounded-md text-right">
-                `;
-                productContainer.appendChild(productRow);
-                container.appendChild(locationEl);
+                standardContainer.innerHTML += `
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-bold mb-4">${location.name}</h3>
+                        <div class="flex items-center justify-between">
+                            <label for="${location.id}-${selectedProductId}" class="text-sm">Count</label>
+                            <input type="number" id="${location.id}-${selectedProductId}" data-product-id="${selectedProductId}" data-location-id="${location.id}" value="${count}" class="count-input w-20 p-1 border rounded-md text-right">
+                        </div>
+                    </div>`;
             });
+            container.appendChild(standardContainer);
+            
+            if (isSpecialProduct) {
+                const specialContainer = document.createElement('div');
+                specialContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6 mt-6';
+                specialContainer.innerHTML += `<h3 class="text-lg font-bold md:col-span-2">Batch & Slushie Inputs</h3>`;
+                specialInputs.forEach(input => {
+                    const count = counts[selectedProductId]?.[currentDay]?.specialInputs?.[input.id] || 0;
+                    specialContainer.innerHTML += `
+                        <div class="bg-white rounded-lg shadow p-6">
+                            <div class="flex items-center justify-between">
+                                <label for="${input.id}-${selectedProductId}" class="text-sm">${input.name}</label>
+                                <input type="number" id="${input.id}-${selectedProductId}" data-product-id="${selectedProductId}" data-special-id="${input.id}" value="${count}" class="special-input w-20 p-1 border rounded-md text-right">
+                            </div>
+                        </div>`;
+                });
+                container.appendChild(specialContainer);
+            }
+        }
+
+        function calculateProductTotal(productId, day) {
+            const product = products.find(p => p.id === productId);
+            const dayCounts = counts[productId]?.[day] || {};
+            
+            let total = locations.reduce((sum, loc) => sum + (Number(dayCounts[loc.id]) || 0), 0);
+            
+            if (product && product.name === specialProductName && dayCounts.specialInputs) {
+                const specials = dayCounts.specialInputs;
+                const kilnerInput = Number(specials.pergolaKilner) || 0;
+                const btlInput = Number(specials.pergolaBtl) || 0;
+                const strawberryInput = Number(specials.strawberrySlushie) || 0;
+                const pinaInput = Number(specials.pinaColadaSlushie) || 0;
+
+                total += (kilnerInput * 8000 * 7 / 12) / 700;
+                total += (btlInput * 700 * 7 / 12) / 700;
+                total += (strawberryInput * 10000 * (350 / 2350)) / 700;
+                total += (pinaInput * 10000 * (350 / 2350)) / 700;
+            }
+            
+            return total;
         }
 
         function renderViewView() {
-            const controlsContainer = document.getElementById('view-controls');
-            const contentContainer = document.getElementById('view-content-container');
-            if (!controlsContainer || !contentContainer) return;
-
-            controlsContainer.innerHTML = '';
-            contentContainer.innerHTML = '';
-
-            const toggleButton = document.createElement('button');
-            toggleButton.id = 'toggle-view-mode-btn';
-            toggleButton.className = 'bg-indigo-500 text-white px-4 py-2 rounded-md shadow hover:bg-indigo-600';
-
+            const controls = document.getElementById('view-controls');
+            const content = document.getElementById('view-content-container');
+            if (!controls || !content) return;
+            controls.innerHTML = '';
+            content.innerHTML = '';
+            const toggleBtn = document.createElement('button');
+            toggleBtn.id = 'toggle-view-mode-btn';
+            toggleBtn.className = 'bg-indigo-500 text-white px-4 py-2 rounded-md shadow';
             if (viewPageMode === 'daily') {
-                toggleButton.textContent = 'Show Weekly Summary';
-                const daySelectorContainer = document.createElement('div');
-                daySelectorContainer.className = 'flex items-center space-x-2';
-                daySelectorContainer.innerHTML = `<label for="day-selector" class="font-semibold">Select Day:</label><select id="day-selector" class="p-2 border rounded-md shadow-sm"></select>`;
-                controlsContainer.appendChild(daySelectorContainer);
+                toggleBtn.textContent = 'Show Weekly Summary';
+                controls.innerHTML = `<div class="flex items-center space-x-2"><label for="day-selector" class="font-semibold">Day:</label><select id="day-selector" class="p-2 border rounded-md"></select></div>`;
                 renderDaySelector('day-selector');
-                renderDailyTotals(contentContainer);
+                renderDailyTotals(content);
             } else {
-                toggleButton.textContent = 'Show Daily View';
-                controlsContainer.innerHTML = `<h2 class="text-xl font-bold">Weekly Summary</h2>`;
-                renderWeeklySummary(contentContainer);
+                toggleBtn.textContent = 'Show Daily View';
+                controls.innerHTML = `<h2 class="text-xl font-bold">Weekly Summary</h2>`;
+                renderWeeklySummary(content);
             }
-            controlsContainer.appendChild(toggleButton);
+            controls.appendChild(toggleBtn);
         }
 
         function renderDailyTotals(container) {
             container.innerHTML = '';
-            if (products.length === 0) {
-                container.innerHTML = `<p class="text-center p-4">No products configured.</p>`;
-                return;
-            }
+            if (products.length === 0) return;
             const list = document.createElement('ul');
             list.className = 'space-y-2';
             products.forEach(product => {
-                const productCountsByDay = counts[product.id]?.[currentDay] || {};
-                const total = locations.reduce((sum, loc) => sum + (Number(productCountsByDay[loc.id]) || 0), 0);
-                const item = document.createElement('li');
-                item.className = 'flex justify-between items-center p-2 rounded-md even:bg-gray-50';
-                item.innerHTML = `<span>${product.name}</span><span class="font-bold text-lg">${total}</span>`;
-                list.appendChild(item);
+                const total = calculateProductTotal(product.id, currentDay);
+                list.innerHTML += `<li class="flex justify-between items-center p-2 rounded-md even:bg-gray-50"><span>${product.name}</span><span class="font-bold text-lg">${total.toFixed(2)}</span></li>`;
             });
             container.appendChild(list);
         }
 
         function renderWeeklySummary(container) {
             container.innerHTML = '';
-            if (products.length === 0) {
-                container.innerHTML = `<p class="text-center p-4">No products configured.</p>`;
-                return;
-            }
+            if (products.length === 0) return;
             const table = document.createElement('table');
             table.className = 'summary-table';
-            const thead = table.createTHead();
-            const headerRow = thead.insertRow();
             const headers = ['Product', 'Opening', ...days.map(d => d.slice(0, 3).toUpperCase())];
-            headers.forEach(text => {
-                const th = document.createElement('th');
-                th.textContent = text;
-                headerRow.appendChild(th);
-            });
+            table.createTHead().insertRow().innerHTML = headers.map(h => `<th>${h}</th>`).join('');
             const tbody = table.createTBody();
             products.forEach(product => {
                 const row = tbody.insertRow();
                 row.insertCell().textContent = product.name;
                 row.insertCell().textContent = product.openingStock || 0;
                 days.forEach(day => {
-                    const dayCounts = counts[product.id]?.[day] || {};
-                    const total = locations.reduce((sum, loc) => sum + (Number(dayCounts[loc.id]) || 0), 0);
-                    row.insertCell().textContent = total;
+                    const total = calculateProductTotal(product.id, day);
+                    row.insertCell().textContent = total.toFixed(2);
                 });
             });
             container.appendChild(table);
@@ -397,21 +377,18 @@
             const list = document.getElementById('product-list');
             if (!list) return;
             list.innerHTML = '';
-            if (products.length === 0) {
-                list.innerHTML = `<li>No products yet.</li>`;
-            } else {
+            if (products.length === 0) list.innerHTML = `<li>No products yet.</li>`;
+            else {
                 products.forEach(product => {
-                    const item = document.createElement('li');
-                    item.className = 'flex flex-col sm:flex-row justify-between items-start sm:items-center p-2 rounded-md hover:bg-gray-100 gap-2';
-                    item.innerHTML = `
-                        <span class="flex-grow">${product.name}</span>
-                        <div class="flex items-center gap-2">
-                            <label for="os-${product.id}" class="text-sm font-medium">Opening:</label>
-                            <input type="number" id="os-${product.id}" data-id="${product.id}" value="${product.openingStock || 0}" class="opening-stock-input w-20 p-1 border rounded-md text-right">
-                            <button data-id="${product.id}" class="delete-product-btn text-red-500 hover:text-red-700 font-semibold text-sm">DELETE</button>
-                        </div>
-                    `;
-                    list.appendChild(item);
+                    list.innerHTML += `
+                        <li class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-2 rounded-md hover:bg-gray-100 gap-2">
+                            <span class="flex-grow">${product.name}</span>
+                            <div class="flex items-center gap-2">
+                                <label for="os-${product.id}" class="text-sm font-medium">Opening:</label>
+                                <input type="number" id="os-${product.id}" data-id="${product.id}" value="${product.openingStock || 0}" class="opening-stock-input w-20 p-1 border rounded-md text-right">
+                                <button data-id="${product.id}" class="delete-product-btn text-red-500 hover:text-red-700 font-semibold text-sm">DELETE</button>
+                            </div>
+                        </li>`;
                 });
             }
         }
@@ -419,114 +396,96 @@
         function setupGlobalEventListeners() {
             const mainContent = document.getElementById('main-content');
             mainContent.addEventListener('change', (e) => {
-                if (e.target && e.target.id === 'day-selector') handleDayChange(e);
-                if (e.target && e.target.id === 'product-selector') handleProductSelect(e);
+                if (e.target.id === 'day-selector') handleDayChange(e);
+                if (e.target.id === 'product-selector') handleProductSelect(e);
             });
             mainContent.addEventListener('click', (e) => {
-                if (e.target && e.target.id === 'toggle-view-mode-btn') handleToggleViewMode();
-                if (e.target && e.target.classList.contains('delete-product-btn')) handleDeleteProduct(e);
-                if (e.target && e.target.id === 'add-product-btn') handleAddProduct();
+                if (e.target.id === 'toggle-view-mode-btn') handleToggleViewMode();
+                if (e.target.classList.contains('delete-product-btn')) handleDeleteProduct(e);
+                if (e.target.id === 'add-product-btn') handleAddProduct();
             });
             mainContent.addEventListener('keyup', (e) => {
-                if (e.target && e.target.id === 'new-product-name' && e.key === 'Enter') handleAddProduct();
+                if (e.target.id === 'new-product-name' && e.key === 'Enter') handleAddProduct();
             });
             mainContent.addEventListener('input', debounce((e) => {
-                if (e.target && e.target.classList.contains('count-input')) handleCountChange(e);
-                if (e.target && e.target.classList.contains('opening-stock-input')) handleOpeningStockChange(e);
+                if (e.target.classList.contains('count-input')) handleCountChange(e);
+                if (e.target.classList.contains('special-input')) handleSpecialInputChange(e);
+                if (e.target.classList.contains('opening-stock-input')) handleOpeningStockChange(e);
             }, 500));
+            
+            // **ADDED**: Event listener to highlight text on focus
+            mainContent.addEventListener('focusin', (e) => {
+                if (e.target.tagName === 'INPUT' && e.target.type === 'number') {
+                    e.target.select();
+                }
+            });
+
             document.getElementById('nav-buttons').addEventListener('click', (e) => {
                 if (e.target.classList.contains('nav-button')) handleNavClick(e);
             });
         }
         
-        function handleDayChange(e) {
-            currentDay = e.target.value;
-            render();
-        }
-
-        function handleProductSelect(e) {
-            selectedProductId = e.target.value;
-            render();
-        }
-
-        function handleToggleViewMode() {
-            viewPageMode = viewPageMode === 'daily' ? 'weekly' : 'daily';
-            render();
-        }
-
-        function handleNavClick(e) {
-            currentView = e.target.dataset.view;
-            render();
-        }
+        function handleDayChange(e) { currentDay = e.target.value; render(); }
+        function handleProductSelect(e) { selectedProductId = e.target.value; render(); }
+        function handleToggleViewMode() { viewPageMode = viewPageMode === 'daily' ? 'weekly' : 'daily'; render(); }
+        function handleNavClick(e) { currentView = e.target.dataset.view; render(); }
 
         async function handleAddProduct() {
             const input = document.getElementById('new-product-name');
-            if (!input) return;
             const productName = input.value.trim();
             if (productName) {
-                try {
-                    await addDoc(collection(db, `artifacts/${appId}/public/data/products`), { name: productName, openingStock: 0 });
-                    input.value = '';
-                } catch (error) {
-                    console.error("Error adding product: ", error);
-                }
+                await addDoc(collection(db, `artifacts/${appId}/public/data/products`), { name: productName, openingStock: 0 });
+                input.value = '';
             }
         }
 
         async function handleDeleteProduct(e) {
             const productId = e.target.dataset.id;
-            try {
-                const batch = writeBatch(db);
-                batch.delete(doc(db, `artifacts/${appId}/public/data/products`, productId));
-                batch.delete(doc(db, `artifacts/${appId}/public/data/counts`, productId));
-                await batch.commit();
-            } catch (error) {
-                console.error("Error deleting product: ", error);
-            }
+            const batch = writeBatch(db);
+            batch.delete(doc(db, `artifacts/${appId}/public/data/products`, productId));
+            batch.delete(doc(db, `artifacts/${appId}/public/data/counts`, productId));
+            await batch.commit();
         }
 
         async function handleCountChange(e) {
             const { productId, locationId } = e.target.dataset;
             const value = e.target.value;
             const countRef = doc(db, `artifacts/${appId}/public/data/counts`, productId);
-            try {
-                await setDoc(countRef, { [currentDay]: { [locationId]: Number(value) || 0 } }, { merge: true });
-            } catch (error) {
-                console.error("Error updating count:", error);
-            }
+            await setDoc(countRef, { [currentDay]: { [locationId]: Number(value) || 0 } }, { merge: true });
+        }
+
+        async function handleSpecialInputChange(e) {
+            const { productId, specialId } = e.target.dataset;
+            const value = e.target.value;
+            const countRef = doc(db, `artifacts/${appId}/public/data/counts`, productId);
+            const fieldPath = `${currentDay}.specialInputs.${specialId}`;
+            await setDoc(countRef, { [currentDay]: { specialInputs: { [specialId]: Number(value) || 0 } } }, { merge: true });
         }
 
         async function handleOpeningStockChange(e) {
             const productId = e.target.dataset.id;
             const value = e.target.value;
             const productRef = doc(db, `artifacts/${appId}/public/data/products`, productId);
-            try {
-                await updateDoc(productRef, { openingStock: Number(value) || 0 });
-            } catch(error) {
-                console.error("Error updating opening stock:", error);
-            }
+            await updateDoc(productRef, { openingStock: Number(value) || 0 });
         }
 
         function updateNavButtons() {
             document.querySelectorAll('.nav-button').forEach(button => {
-                button.classList.toggle('bg-blue-500', button.dataset.view === currentView);
-                button.classList.toggle('hover:bg-blue-600', button.dataset.view === currentView);
-                button.classList.toggle('bg-gray-500', button.dataset.view !== currentView);
-                button.classList.toggle('hover:bg-gray-600', button.dataset.view !== currentView);
+                const isSelected = button.dataset.view === currentView;
+                button.classList.toggle('bg-blue-500', isSelected);
+                button.classList.toggle('bg-gray-500', !isSelected);
             });
         }
 
         function debounce(func, delay) {
             let timeout;
-            return function(...args) {
+            return (...args) => {
                 clearTimeout(timeout);
                 timeout = setTimeout(() => func.apply(this, args), delay);
             };
         }
 
-        // Start the app
         main();
-
     </script>
 </body>
 </html>
