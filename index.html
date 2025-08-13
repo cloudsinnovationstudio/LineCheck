@@ -155,14 +155,13 @@
              messagingSenderId: "348317364563",
              appId: "1:348317364563:web:2d0e8bec52d5323ca0b1a6"
         };
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'bar-stock-counter';
 
         let db, auth, userId;
         let products = [];
         let counts = {};
         let currentView = 'input';
         let viewPageMode = 'daily';
-        let inputMode = 'byProduct'; // 'byProduct' or 'byRoom'
+        let inputMode = 'byProduct';
         let selectedProductId = null;
         let selectedRoomId = null;
         let dataListenersAttached = false;
@@ -231,7 +230,8 @@
         }
 
         function setupDataListeners() {
-            onSnapshot(collection(db, `artifacts/${appId}/public/data/products`), (snapshot) => {
+            // **FIXED**: Simplified collection path
+            onSnapshot(collection(db, 'products'), (snapshot) => {
                 products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 products.sort((a, b) => (a.order || 0) - (b.order || 0));
                 if (!selectedProductId && !selectedRoomId && products.length > 0) {
@@ -240,7 +240,9 @@
                 }
                 render();
             }, (err) => console.error("Product listener error:", err));
-            onSnapshot(collection(db, `artifacts/${appId}/public/data/counts`), (snapshot) => {
+            
+            // **FIXED**: Simplified collection path
+            onSnapshot(collection(db, 'counts'), (snapshot) => {
                 counts = {};
                 snapshot.docs.forEach(doc => { counts[doc.id] = doc.data(); });
                 render();
@@ -587,7 +589,7 @@
             const productName = input.value.trim();
             if (productName) {
                 const maxOrder = products.reduce((max, p) => Math.max(max, p.order || 0), 0);
-                await addDoc(collection(db, `artifacts/${appId}/public/data/products`), { 
+                await addDoc(collection(db, 'products'), { 
                     name: productName, 
                     openingStock: 0,
                     order: products.length > 0 ? maxOrder + 1 : 1
@@ -599,8 +601,8 @@
         async function handleDeleteProduct(target) {
             const productId = target.dataset.id;
             const batch = writeBatch(db);
-            batch.delete(doc(db, `artifacts/${appId}/public/data/products`, productId));
-            batch.delete(doc(db, `artifacts/${appId}/public/data/counts`, productId));
+            batch.delete(doc(db, 'products', productId));
+            batch.delete(doc(db, 'counts', productId));
             await batch.commit();
         }
 
@@ -618,16 +620,13 @@
             const productA = products[currentIndex];
             const productB = products[otherIndex];
 
-            // Safeguard: Ensure both products have an order value before swapping.
-            // If a product is missing an order, assign it its current index + 1 (to avoid 0).
             const orderA = productA.order !== undefined ? productA.order : currentIndex + 1;
             const orderB = productB.order !== undefined ? productB.order : otherIndex + 1;
 
             const batch = writeBatch(db);
-            const docARef = doc(db, `artifacts/${appId}/public/data/products`, productA.id);
-            const docBRef = doc(db, `artifacts/${appId}/public/data/products`, productB.id);
+            const docARef = doc(db, 'products', productA.id);
+            const docBRef = doc(db, 'products', productB.id);
 
-            // Swap the determined order values
             batch.update(docARef, { order: orderB });
             batch.update(docBRef, { order: orderA });
 
@@ -637,21 +636,21 @@
         async function handleCountChange(e) {
             const { productId, locationId } = e.target.dataset;
             const value = e.target.value;
-            const countRef = doc(db, `artifacts/${appId}/public/data/counts`, productId);
+            const countRef = doc(db, 'counts', productId);
             await setDoc(countRef, { [currentDay]: { [locationId]: Number(value) || 0 } }, { merge: true });
         }
 
         async function handleSpecialInputChange(e) {
             const { productId, specialId } = e.target.dataset;
             const value = e.target.value;
-            const countRef = doc(db, `artifacts/${appId}/public/data/counts`, productId);
+            const countRef = doc(db, 'counts', productId);
             await setDoc(countRef, { [currentDay]: { specialInputs: { [specialId]: Number(value) || 0 } } }, { merge: true });
         }
 
         async function handleOpeningStockChange(e) {
             const productId = e.target.dataset.id;
             const value = e.target.value;
-            const productRef = doc(db, `artifacts/${appId}/public/data/products`, productId);
+            const productRef = doc(db, 'products', productId);
             await updateDoc(productRef, { openingStock: Number(value) || 0 });
         }
 
@@ -674,4 +673,4 @@
         main();
     </script>
 </body>
-</ht
+</html>
