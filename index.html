@@ -106,9 +106,15 @@
                     <label for="day-selector" class="font-semibold">Select Day:</label>
                     <select id="day-selector" class="p-2 border rounded-md shadow-sm"></select>
                 </div>
+                <hr/>
                 <div class="flex items-center space-x-2">
-                    <label for="product-selector" class="font-semibold">Select Product:</label>
+                    <label for="product-selector" class="font-semibold w-28">By Product:</label>
                     <select id="product-selector" class="flex-grow p-2 border rounded-md shadow-sm"></select>
+                </div>
+                 <div class="text-center text-gray-500 font-semibold">OR</div>
+                <div class="flex items-center space-x-2">
+                    <label for="room-selector" class="font-semibold w-28">By Room:</label>
+                    <select id="room-selector" class="flex-grow p-2 border rounded-md shadow-sm"></select>
                 </div>
             </div>
             <div id="product-input-container"></div>
@@ -156,7 +162,9 @@
         let counts = {};
         let currentView = 'input';
         let viewPageMode = 'daily';
+        let inputMode = 'byProduct'; // 'byProduct' or 'byRoom'
         let selectedProductId = null;
+        let selectedRoomId = null;
         let dataListenersAttached = false;
 
         const locations = [
@@ -199,7 +207,7 @@
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
-            setupEventListeners(); // Setup all listeners once.
+            setupEventListeners();
             
             onAuthStateChanged(auth, (user) => {
                 const loginOverlay = document.getElementById('login-overlay');
@@ -215,7 +223,7 @@
                     }
                 } else {
                     userId = null;
-                    dataListenersAttached = false; // Reset flag on logout
+                    dataListenersAttached = false;
                     loginOverlay.style.display = 'flex';
                     appContainer.style.display = 'none';
                 }
@@ -225,9 +233,11 @@
         function setupDataListeners() {
             onSnapshot(collection(db, `artifacts/${appId}/public/data/products`), (snapshot) => {
                 products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                // Sort by the new order field
                 products.sort((a, b) => (a.order || 0) - (b.order || 0));
-                if (!selectedProductId && products.length > 0) selectedProductId = products[0].id;
+                if (!selectedProductId && !selectedRoomId && products.length > 0) {
+                    selectedProductId = products[0].id;
+                    inputMode = 'byProduct';
+                }
                 render();
             }, (err) => console.error("Product listener error:", err));
             onSnapshot(collection(db, `artifacts/${appId}/public/data/counts`), (snapshot) => {
@@ -251,32 +261,42 @@
             updateNavButtons();
         }
 
-        function renderDaySelector(containerId) {
-            const selector = document.getElementById(containerId);
-            if (!selector) return;
-            selector.innerHTML = '';
-            days.forEach(day => {
-                selector.add(new Option(day.charAt(0).toUpperCase() + day.slice(1), day));
-            });
-            selector.value = currentDay;
-        }
-
         function renderInputView() {
             renderDaySelector('day-selector');
             const productSelector = document.getElementById('product-selector');
+            const roomSelector = document.getElementById('room-selector');
             const container = document.getElementById('product-input-container');
-            if (!productSelector || !container) return;
+            if (!productSelector || !roomSelector || !container) return;
 
+            // Populate selectors
             productSelector.innerHTML = '<option value="">Select a product...</option>';
             products.forEach(p => productSelector.add(new Option(p.name, p.id)));
-            productSelector.value = selectedProductId;
+            
+            roomSelector.innerHTML = '<option value="">Select a room...</option>';
+            locations.forEach(l => roomSelector.add(new Option(l.name, l.id)));
+
+            // Set state and render content
             container.innerHTML = '';
-
-            if (!selectedProductId) {
-                container.innerHTML = `<p class="text-center p-4 bg-white rounded-lg shadow">Please select a product.</p>`;
-                return;
+            if (inputMode === 'byProduct') {
+                productSelector.value = selectedProductId;
+                roomSelector.value = "";
+                if (!selectedProductId) {
+                    container.innerHTML = `<p class="text-center p-4 bg-white rounded-lg shadow">Please select a product.</p>`;
+                } else {
+                    renderInputByProduct(container);
+                }
+            } else { // byRoom
+                roomSelector.value = selectedRoomId;
+                productSelector.value = "";
+                 if (!selectedRoomId) {
+                    container.innerHTML = `<p class="text-center p-4 bg-white rounded-lg shadow">Please select a room.</p>`;
+                } else {
+                    renderInputByRoom(container);
+                }
             }
+        }
 
+        function renderInputByProduct(container) {
             const selectedProduct = products.find(p => p.id === selectedProductId);
             const specialInputsForProduct = selectedProduct ? specialProductConfig[selectedProduct.name.toLowerCase()] : null;
 
@@ -300,10 +320,8 @@
                 const specialContainerWrapper = document.createElement('div');
                 specialContainerWrapper.className = 'mt-6';
                 specialContainerWrapper.innerHTML = `<h3 class="text-lg font-bold mb-4">Batch & Special Inputs</h3>`;
-                
                 const specialContainer = document.createElement('div');
                 specialContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
-
                 specialInputsForProduct.forEach(input => {
                     const count = counts[selectedProductId]?.[currentDay]?.specialInputs?.[input.id] || 0;
                     const specialEl = document.createElement('div');
@@ -318,6 +336,30 @@
                 specialContainerWrapper.appendChild(specialContainer);
                 container.appendChild(specialContainerWrapper);
             }
+        }
+
+        function renderInputByRoom(container) {
+            const roomName = locations.find(l => l.id === selectedRoomId)?.name || '';
+            const roomContainer = document.createElement('div');
+            roomContainer.className = 'bg-white rounded-lg shadow p-6';
+            roomContainer.innerHTML = `<h2 class="text-xl font-bold mb-4">Editing: ${roomName}</h2>`;
+            
+            const productList = document.createElement('div');
+            productList.className = 'space-y-3';
+
+            products.forEach(product => {
+                const count = counts[product.id]?.[currentDay]?.[selectedRoomId] || 0;
+                const productRow = document.createElement('div');
+                productRow.className = 'flex items-center justify-between';
+                productRow.innerHTML = `
+                    <label for="${selectedRoomId}-${product.id}" class="text-sm">${product.name}</label>
+                    <input type="number" id="${selectedRoomId}-${product.id}" data-product-id="${product.id}" data-location-id="${selectedRoomId}" value="${count}" class="count-input w-20 p-1 border rounded-md text-right">
+                `;
+                productList.appendChild(productRow);
+            });
+            
+            roomContainer.appendChild(productList);
+            container.appendChild(roomContainer);
         }
 
         function calculateProductTotal(productId, day) {
@@ -425,7 +467,7 @@
                 const th = document.createElement('th');
                 const isCurrentDay = headerText.toLowerCase() === currentDay;
                 if (isCurrentDay) {
-                    th.className = 'bg-blue-200'; // Highlight class for header
+                    th.className = 'bg-blue-200';
                 }
                 th.textContent = headerText.length > 3 ? headerText.slice(0, 3).toUpperCase() : headerText;
                 headerRow.appendChild(th);
@@ -441,7 +483,7 @@
                     const cell = row.insertCell();
                     cell.textContent = total.toFixed(2);
                     if (day === currentDay) {
-                        cell.className = 'bg-blue-100'; // Lighter highlight for data cells
+                        cell.className = 'bg-blue-100';
                     }
                 });
             });
@@ -466,14 +508,10 @@
                         </div>
                         <div class="flex items-center gap-1">
                              <button data-id="${product.id}" data-direction="up" class="reorder-btn p-1" ${index === 0 ? 'disabled' : ''}>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-up-square" viewBox="0 0 16 16">
-                                  <path fill-rule="evenodd" d="M15 2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2zM0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm8.5 9.5a.5.5 0 0 1-1 0V5.707L5.354 7.854a.5.5 0 1 1-.708-.708l3-3a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 5.707V11.5z"/>
-                                </svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-up-square" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M15 2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2zM0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm8.5 9.5a.5.5 0 0 1-1 0V5.707L5.354 7.854a.5.5 0 1 1-.708-.708l3-3a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 5.707V11.5z"/></svg>
                             </button>
                             <button data-id="${product.id}" data-direction="down" class="reorder-btn p-1" ${index === products.length - 1 ? 'disabled' : ''}>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-down-square" viewBox="0 0 16 16">
-                                  <path fill-rule="evenodd" d="M15 2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2zM0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm8.5 2.5a.5.5 0 0 0-1 0v5.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V4.5z"/>
-                                </svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-down-square" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M15 2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2zM0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm8.5 2.5a.5.5 0 0 0-1 0v5.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V4.5z"/></svg>
                             </button>
                         </div>
                         <button data-id="${product.id}" class="delete-product-btn text-red-500 hover:text-red-700 font-semibold text-sm">DELETE</button>
@@ -485,9 +523,8 @@
 
         function setupEventListeners() {
             document.body.addEventListener('click', async (e) => {
-                const target = e.target.closest('button'); // Find the closest button element
+                const target = e.target.closest('button');
                 if (!target) return;
-
                 if (target.id === 'login-submit') {
                     const emailInput = document.getElementById('email-input');
                     const passwordInput = document.getElementById('password-input');
@@ -510,6 +547,7 @@
             document.body.addEventListener('change', (e) => {
                 if (e.target.id === 'day-selector') handleDayChange(e);
                 if (e.target.id === 'product-selector') handleProductSelect(e);
+                if (e.target.id === 'room-selector') handleRoomSelect(e);
             });
 
             document.body.addEventListener('keyup', (e) => {
@@ -531,7 +569,18 @@
         }
         
         function handleDayChange(e) { currentDay = e.target.value; render(); }
-        function handleProductSelect(e) { selectedProductId = e.target.value; render(); }
+        function handleProductSelect(e) { 
+            selectedProductId = e.target.value;
+            selectedRoomId = null;
+            inputMode = 'byProduct';
+            render(); 
+        }
+        function handleRoomSelect(e) {
+            selectedRoomId = e.target.value;
+            selectedProductId = null;
+            inputMode = 'byRoom';
+            render();
+        }
         function handleToggleViewMode() { viewPageMode = viewPageMode === 'daily' ? 'weekly' : 'daily'; render(); }
         function handleNavClick(target) { currentView = target.dataset.view; render(); }
 
@@ -563,7 +612,7 @@
             const currentIndex = products.findIndex(p => p.id === productId);
 
             if ((direction === 'up' && currentIndex === 0) || (direction === 'down' && currentIndex === products.length - 1)) {
-                return; // Can't move further
+                return;
             }
 
             const otherIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
