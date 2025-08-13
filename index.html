@@ -147,14 +147,7 @@
 };
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'bar-stock-counter';
 
-        let db, auth, userId;const firebaseConfig = {
-  apiKey: "AIzaSyDTTRoipMen2gSn8s602nV_Ao_9MogDUK4",
-  authDomain: "linecheck-84928.firebaseapp.com",
-  projectId: "linecheck-84928",
-  storageBucket: "linecheck-84928.firebasestorage.app",
-  messagingSenderId: "348317364563",
-  appId: "1:348317364563:web:2d0e8bec52d5323ca0b1a6"
-};
+        let db, auth, userId;
         let products = [];
         let counts = {};
         let currentView = 'input';
@@ -166,13 +159,18 @@
             { id: 'coldRoom', name: 'Cold Room' },
             { id: 'kegRoom', name: 'Keg Room' }
         ];
-        const specialProductName = "Ron Santiago 8YO";
-        const specialInputs = [
-            { id: 'pergolaKilner', name: 'Pergola Punch Batch Kilner' },
-            { id: 'pergolaBtl', name: 'Pergola Punch Batch BTL' },
-            { id: 'strawberrySlushie', name: 'Strawberry Daquiri Slushie' },
-            { id: 'pinaColadaSlushie', name: 'Pina Colada Slushie' }
-        ];
+        const specialProductConfig = {
+            "Ron Santiago 8YO": [
+                { id: 'pergolaKilner', name: 'Pergola Punch Batch Kilner' },
+                { id: 'pergolaBtl', name: 'Pergola Punch Batch BTL' },
+                { id: 'strawberrySlushie', name: 'Strawberry Daquiri Slushie' },
+                { id: 'pinaColadaSlushie', name: 'Pina Colada Slushie' }
+            ],
+            "Absolut Raspberri": [
+                { id: 'raspberryDaisyKilner', name: 'Raspberry Daisy Kilner' },
+                { id: 'raspberryDaisyBtl', name: 'Raspberry Daisy BTL' }
+            ]
+        };
         const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
         let currentDay = days[(new Date().getDay() + 6) % 7];
 
@@ -262,7 +260,7 @@
             }
 
             const selectedProduct = products.find(p => p.id === selectedProductId);
-            const isSpecialProduct = selectedProduct && selectedProduct.name === specialProductName;
+            const specialInputsForProduct = selectedProduct ? specialProductConfig[selectedProduct.name] : null;
 
             const standardContainer = document.createElement('div');
             standardContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
@@ -280,7 +278,7 @@
             });
             container.appendChild(standardContainer);
             
-            if (isSpecialProduct) {
+            if (specialInputsForProduct) {
                 const specialContainerWrapper = document.createElement('div');
                 specialContainerWrapper.className = 'mt-6';
                 specialContainerWrapper.innerHTML = `<h3 class="text-lg font-bold mb-4">Batch & Slushie Inputs</h3>`;
@@ -288,7 +286,7 @@
                 const specialContainer = document.createElement('div');
                 specialContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
 
-                specialInputs.forEach(input => {
+                specialInputsForProduct.forEach(input => {
                     const count = counts[selectedProductId]?.[currentDay]?.specialInputs?.[input.id] || 0;
                     const specialEl = document.createElement('div');
                     specialEl.className = 'bg-white rounded-lg shadow p-6';
@@ -310,17 +308,25 @@
             
             let total = locations.reduce((sum, loc) => sum + (Number(dayCounts[loc.id]) || 0), 0);
             
-            if (product && product.name === specialProductName && dayCounts.specialInputs) {
+            if (product && dayCounts.specialInputs) {
                 const specials = dayCounts.specialInputs;
-                const kilnerInput = Number(specials.pergolaKilner) || 0;
-                const btlInput = Number(specials.pergolaBtl) || 0;
-                const strawberryInput = Number(specials.strawberrySlushie) || 0;
-                const pinaInput = Number(specials.pinaColadaSlushie) || 0;
+                if (product.name === "Ron Santiago 8YO") {
+                    const kilnerInput = Number(specials.pergolaKilner) || 0;
+                    const btlInput = Number(specials.pergolaBtl) || 0;
+                    const strawberryInput = Number(specials.strawberrySlushie) || 0;
+                    const pinaInput = Number(specials.pinaColadaSlushie) || 0;
 
-                total += (kilnerInput * 8000 * 7 / 12) / 700;
-                total += (btlInput * 700 * 7 / 12) / 700;
-                total += (strawberryInput * 10000 * (350 / 2350)) / 700;
-                total += (pinaInput * 10000 * (350 / 2350)) / 700;
+                    total += (kilnerInput * 8000 * 7 / 12) / 700;
+                    total += (btlInput * 700 * 7 / 12) / 700;
+                    total += (strawberryInput * 10000 * (350 / 2350)) / 700;
+                    total += (pinaInput * 10000 * (350 / 2350)) / 700;
+                } else if (product.name === "Absolut Raspberri") {
+                    const kilnerInput = Number(specials.raspberryDaisyKilner) || 0;
+                    const btlInput = Number(specials.raspberryDaisyBtl) || 0;
+                    
+                    total += (kilnerInput * 8000 * 7 / 12) / 700;
+                    total += (btlInput * 700 * 7 / 12) / 700;
+                }
             }
             
             return total;
