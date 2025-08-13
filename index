@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bar Stock Counter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            overflow-x: auto;
+            display: block;
+        }
+        .summary-table th, .summary-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            white-space: nowrap;
+        }
+        .summary-table th {
+            background-color: #f2f2f2;
+            font-weight: 600;
+        }
+        .summary-table td:not(:first-child) {
+            text-align: center;
+        }
+        .summary-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div id="app" class="max-w-4xl mx-auto p-4">
+        
+        <header class="bg-white rounded-lg shadow p-4 mb-6">
+            <h1 class="text-2xl font-bold text-center text-gray-700">Bar Stock Line Check</h1>
+            <nav id="nav-buttons" class="flex justify-center space-x-2 mt-4">
+                <button data-view="input" class="nav-button bg-blue-500 text-white px-4 py-2 rounded-md shadow hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75">Input</button>
+                <button data-view="view" class="nav-button bg-gray-500 text-white px-4 py-2 rounded-md shadow hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75">View</button>
+                <button data-view="configure" class="nav-button bg-gray-500 text-white px-4 py-2 rounded-md shadow hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75">Configure</button>
+            </nav>
+        </header>
+
+        <main id="main-content">
+            <div id="loading" class="text-center p-8">
+                <div class="loader"></div>
+                <p>Loading App...</p>
+            </div>
+        </main>
+
+    </div>
+
+    <!-- Templates for different views -->
+    <template id="input-view-template">
+        <div id="input-view" class="space-y-6">
+            <div class="bg-white p-4 rounded-lg shadow space-y-4">
+                <div class="flex items-center space-x-2">
+                    <label for="day-selector" class="font-semibold">Select Day:</label>
+                    <select id="day-selector" class="p-2 border rounded-md shadow-sm"></select>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <label for="product-selector" class="font-semibold">Select Product:</label>
+                    <select id="product-selector" class="flex-grow p-2 border rounded-md shadow-sm"></select>
+                </div>
+            </div>
+            <div id="product-input-container" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Location sections for selected product will be generated here -->
+            </div>
+        </div>
+    </template>
+
+    <template id="view-view-template">
+        <div id="view-view" class="bg-white rounded-lg shadow p-6">
+            <div id="view-controls" class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4"></div>
+            <div id="view-content-container"></div>
+        </div>
+    </template>
+
+    <template id="configure-view-template">
+        <div id="configure-view" class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold mb-4">Configure Products</h2>
+            <div class="flex flex-col sm:flex-row gap-2 mb-6">
+                <input type="text" id="new-product-name" class="flex-grow p-2 border rounded-md" placeholder="Enter new product name">
+                <button id="add-product-btn" class="bg-green-500 text-white px-4 py-2 rounded-md shadow hover:bg-green-600">Add Product</button>
+            </div>
+            <div id="product-list-container">
+                <h3 class="font-semibold mb-2">Current Products:</h3>
+                <ul id="product-list" class="space-y-2"></ul>
+            </div>
+        </div>
+    </template>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, collection, onSnapshot, addDoc, deleteDoc, setDoc, writeBatch, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "DEMO", authDomain: "DEMO", projectId: "DEMO" };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'bar-stock-counter';
+
+        let db, auth, userId;
+        let products = [];
+        let counts = {};
+        let currentView = 'input';
+        let viewPageMode = 'daily';
+        let selectedProductId = null;
+        const locations = [
+            { id: 'islandBar', name: 'Island Bar' },
+            { id: 'mainBar', name: 'Main Bar' },
+            { id: 'coldRoom', name: 'Cold Room' },
+            { id: 'kegRoom', name: 'Keg Room' }
+        ];
+        const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        let currentDay = days[(new Date().getDay() + 6) % 7];
+
+        async function main() {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                    document.getElementById('loading').style.display = 'none';
+                    setupGlobalEventListeners();
+                    setupListeners();
+                } else {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Error signing in:", error);
+                        document.getElementById('loading').innerHTML = '<p class="text-red-500">Error connecting.</p>';
+                    }
+                }
+            });
+        }
+
+        function setupListeners() {
+            onSnapshot(collection(db, `artifacts/${appId}/public/data/products`), (snapshot) => {
+                products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                products.sort((a, b) => a.name.localeCompare(b.name));
+                if (selectedProductId === null && products.length > 0) {
+                    selectedProductId = products[0].id;
+                }
+                render();
+            }, (error) => console.error("Error fetching products:", error));
+
+            onSnapshot(collection(db, `artifacts/${appId}/public/data/counts`), (snapshot) => {
+                counts = {};
+                snapshot.docs.forEach(doc => { counts[doc.id] = doc.data(); });
+                render();
+            }, (error) => console.error("Error fetching counts:", error));
+        }
+
+        function render() {
+            if (!userId) return;
+            const mainContent = document.getElementById('main-content');
+            while (mainContent.lastChild && mainContent.lastChild.id !== 'loading') {
+                mainContent.removeChild(mainContent.lastChild);
+            }
+            switch (currentView) {
+                case 'input':
+                    mainContent.appendChild(document.getElementById('input-view-template').content.cloneNode(true));
+                    renderInputView();
+                    break;
+                case 'view':
+                    mainContent.appendChild(document.getElementById('view-view-template').content.cloneNode(true));
+                    renderViewView();
+                    break;
+                case 'configure':
+                    mainContent.appendChild(document.getElementById('configure-view-template').content.cloneNode(true));
+                    renderConfigureView();
+                    break;
+            }
+            updateNavButtons();
+        }
+
+        function renderDaySelector(containerId) {
+            const selector = document.getElementById(containerId);
+            if (!selector) return;
+            selector.innerHTML = '';
+            days.forEach(day => {
+                const option = document.createElement('option');
+                option.value = day;
+                option.textContent = day.charAt(0).toUpperCase() + day.slice(1);
+                selector.appendChild(option);
+            });
+            selector.value = currentDay;
+        }
+
+        function renderInputView() {
+            renderDaySelector('day-selector');
+            const productSelector = document.getElementById('product-selector');
+            const container = document.getElementById('product-input-container');
+            if (!productSelector || !container) return;
+
+            productSelector.innerHTML = '<option value="">Select a product...</option>';
+            products.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product.id;
+                option.textContent = product.name;
+                productSelector.appendChild(option);
+            });
+            productSelector.value = selectedProductId;
+
+            container.innerHTML = '';
+            if (!selectedProductId) {
+                container.innerHTML = `<p class="md:col-span-2 text-center p-4 bg-white rounded-lg shadow">Please select a product to enter counts.</p>`;
+                return;
+            }
+
+            locations.forEach(location => {
+                const locationEl = document.createElement('div');
+                locationEl.className = 'bg-white rounded-lg shadow p-6';
+                locationEl.innerHTML = `<h3 class="text-lg font-bold mb-4">${location.name}</h3><div class="space-y-3"></div>`;
+                const productContainer = locationEl.querySelector('.space-y-3');
+                const count = counts[selectedProductId]?.[currentDay]?.[location.id] || 0;
+                const productRow = document.createElement('div');
+                productRow.className = 'flex items-center justify-between';
+                productRow.innerHTML = `
+                    <label for="${location.id}-${selectedProductId}" class="text-sm">Count</label>
+                    <input type="number" id="${location.id}-${selectedProductId}" data-product-id="${selectedProductId}" data-location-id="${location.id}" value="${count}" class="count-input w-20 p-1 border rounded-md text-right">
+                `;
+                productContainer.appendChild(productRow);
+                container.appendChild(locationEl);
+            });
+        }
+
+        function renderViewView() {
+            const controlsContainer = document.getElementById('view-controls');
+            const contentContainer = document.getElementById('view-content-container');
+            if (!controlsContainer || !contentContainer) return;
+
+            controlsContainer.innerHTML = '';
+            contentContainer.innerHTML = '';
+
+            const toggleButton = document.createElement('button');
+            toggleButton.id = 'toggle-view-mode-btn';
+            toggleButton.className = 'bg-indigo-500 text-white px-4 py-2 rounded-md shadow hover:bg-indigo-600';
+
+            if (viewPageMode === 'daily') {
+                toggleButton.textContent = 'Show Weekly Summary';
+                const daySelectorContainer = document.createElement('div');
+                daySelectorContainer.className = 'flex items-center space-x-2';
+                daySelectorContainer.innerHTML = `<label for="day-selector" class="font-semibold">Select Day:</label><select id="day-selector" class="p-2 border rounded-md shadow-sm"></select>`;
+                controlsContainer.appendChild(daySelectorContainer);
+                renderDaySelector('day-selector');
+                renderDailyTotals(contentContainer);
+            } else {
+                toggleButton.textContent = 'Show Daily View';
+                controlsContainer.innerHTML = `<h2 class="text-xl font-bold">Weekly Summary</h2>`;
+                renderWeeklySummary(contentContainer);
+            }
+            controlsContainer.appendChild(toggleButton);
+        }
+
+        function renderDailyTotals(container) {
+            container.innerHTML = '';
+            if (products.length === 0) {
+                container.innerHTML = `<p class="text-center p-4">No products configured.</p>`;
+                return;
+            }
+            const list = document.createElement('ul');
+            list.className = 'space-y-2';
+            products.forEach(product => {
+                const productCountsByDay = counts[product.id]?.[currentDay] || {};
+                const total = locations.reduce((sum, loc) => sum + (Number(productCountsByDay[loc.id]) || 0), 0);
+                const item = document.createElement('li');
+                item.className = 'flex justify-between items-center p-2 rounded-md even:bg-gray-50';
+                item.innerHTML = `<span>${product.name}</span><span class="font-bold text-lg">${total}</span>`;
+                list.appendChild(item);
+            });
+            container.appendChild(list);
+        }
+
+        function renderWeeklySummary(container) {
+            container.innerHTML = '';
+            if (products.length === 0) {
+                container.innerHTML = `<p class="text-center p-4">No products configured.</p>`;
+                return;
+            }
+            const table = document.createElement('table');
+            table.className = 'summary-table';
+            const thead = table.createTHead();
+            const headerRow = thead.insertRow();
+            const headers = ['Product', 'Opening', ...days.map(d => d.slice(0, 3).toUpperCase())];
+            headers.forEach(text => {
+                const th = document.createElement('th');
+                th.textContent = text;
+                headerRow.appendChild(th);
+            });
+            const tbody = table.createTBody();
+            products.forEach(product => {
+                const row = tbody.insertRow();
+                row.insertCell().textContent = product.name;
+                row.insertCell().textContent = product.openingStock || 0;
+                days.forEach(day => {
+                    const dayCounts = counts[product.id]?.[day] || {};
+                    const total = locations.reduce((sum, loc) => sum + (Number(dayCounts[loc.id]) || 0), 0);
+                    row.insertCell().textContent = total;
+                });
+            });
+            container.appendChild(table);
+        }
+
+        function renderConfigureView() {
+            const list = document.getElementById('product-list');
+            if (!list) return;
+            list.innerHTML = '';
+            if (products.length === 0) {
+                list.innerHTML = `<li>No products yet.</li>`;
+            } else {
+                products.forEach(product => {
+                    const item = document.createElement('li');
+                    item.className = 'flex flex-col sm:flex-row justify-between items-start sm:items-center p-2 rounded-md hover:bg-gray-100 gap-2';
+                    item.innerHTML = `
+                        <span class="flex-grow">${product.name}</span>
+                        <div class="flex items-center gap-2">
+                            <label for="os-${product.id}" class="text-sm font-medium">Opening:</label>
+                            <input type="number" id="os-${product.id}" data-id="${product.id}" value="${product.openingStock || 0}" class="opening-stock-input w-20 p-1 border rounded-md text-right">
+                            <button data-id="${product.id}" class="delete-product-btn text-red-500 hover:text-red-700 font-semibold text-sm">DELETE</button>
+                        </div>
+                    `;
+                    list.appendChild(item);
+                });
+            }
+        }
+
+        function setupGlobalEventListeners() {
+            const mainContent = document.getElementById('main-content');
+            mainContent.addEventListener('change', (e) => {
+                if (e.target && e.target.id === 'day-selector') handleDayChange(e);
+                if (e.target && e.target.id === 'product-selector') handleProductSelect(e);
+            });
+            mainContent.addEventListener('click', (e) => {
+                if (e.target && e.target.id === 'toggle-view-mode-btn') handleToggleViewMode();
+                if (e.target && e.target.classList.contains('delete-product-btn')) handleDeleteProduct(e);
+                if (e.target && e.target.id === 'add-product-btn') handleAddProduct();
+            });
+            mainContent.addEventListener('keyup', (e) => {
+                if (e.target && e.target.id === 'new-product-name' && e.key === 'Enter') handleAddProduct();
+            });
+            mainContent.addEventListener('input', debounce((e) => {
+                if (e.target && e.target.classList.contains('count-input')) handleCountChange(e);
+                if (e.target && e.target.classList.contains('opening-stock-input')) handleOpeningStockChange(e);
+            }, 500));
+            document.getElementById('nav-buttons').addEventListener('click', (e) => {
+                if (e.target.classList.contains('nav-button')) handleNavClick(e);
+            });
+        }
+        
+        function handleDayChange(e) {
+            currentDay = e.target.value;
+            render();
+        }
+
+        function handleProductSelect(e) {
+            selectedProductId = e.target.value;
+            render();
+        }
+
+        function handleToggleViewMode() {
+            viewPageMode = viewPageMode === 'daily' ? 'weekly' : 'daily';
+            render();
+        }
+
+        function handleNavClick(e) {
+            currentView = e.target.dataset.view;
+            render();
+        }
+
+        async function handleAddProduct() {
+            const input = document.getElementById('new-product-name');
+            if (!input) return;
+            const productName = input.value.trim();
+            if (productName) {
+                try {
+                    await addDoc(collection(db, `artifacts/${appId}/public/data/products`), { name: productName, openingStock: 0 });
+                    input.value = '';
+                } catch (error) {
+                    console.error("Error adding product: ", error);
+                }
+            }
+        }
+
+        async function handleDeleteProduct(e) {
+            const productId = e.target.dataset.id;
+            try {
+                const batch = writeBatch(db);
+                batch.delete(doc(db, `artifacts/${appId}/public/data/products`, productId));
+                batch.delete(doc(db, `artifacts/${appId}/public/data/counts`, productId));
+                await batch.commit();
+            } catch (error) {
+                console.error("Error deleting product: ", error);
+            }
+        }
+
+        async function handleCountChange(e) {
+            const { productId, locationId } = e.target.dataset;
+            const value = e.target.value;
+            const countRef = doc(db, `artifacts/${appId}/public/data/counts`, productId);
+            try {
+                await setDoc(countRef, { [currentDay]: { [locationId]: Number(value) || 0 } }, { merge: true });
+            } catch (error) {
+                console.error("Error updating count:", error);
+            }
+        }
+
+        async function handleOpeningStockChange(e) {
+            const productId = e.target.dataset.id;
+            const value = e.target.value;
+            const productRef = doc(db, `artifacts/${appId}/public/data/products`, productId);
+            try {
+                await updateDoc(productRef, { openingStock: Number(value) || 0 });
+            } catch(error) {
+                console.error("Error updating opening stock:", error);
+            }
+        }
+
+        function updateNavButtons() {
+            document.querySelectorAll('.nav-button').forEach(button => {
+                button.classList.toggle('bg-blue-500', button.dataset.view === currentView);
+                button.classList.toggle('hover:bg-blue-600', button.dataset.view === currentView);
+                button.classList.toggle('bg-gray-500', button.dataset.view !== currentView);
+                button.classList.toggle('hover:bg-gray-600', button.dataset.view !== currentView);
+            });
+        }
+
+        function debounce(func, delay) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), delay);
+            };
+        }
+
+        main();
+    </script>
+</body>
+</html>
