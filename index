@@ -115,7 +115,14 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, collection, onSnapshot, addDoc, deleteDoc, setDoc, writeBatch, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "DEMO", authDomain: "DEMO", projectId: "DEMO" };
+        const firebaseConfig = {
+  apiKey: "AIzaSyDTTRoipMen2gSn8s602nV_Ao_9MogDUK4",
+  authDomain: "linecheck-84928.firebaseapp.com",
+  projectId: "linecheck-84928",
+  storageBucket: "linecheck-84928.firebasestorage.app",
+  messagingSenderId: "348317364563",
+  appId: "1:348317364563:web:2d0e8bec52d5323ca0b1a6"
+};
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'bar-stock-counter';
 
         let db, auth, userId;
