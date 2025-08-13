@@ -58,6 +58,10 @@
             align-items: center;
             z-index: 1000;
         }
+        .reorder-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -221,7 +225,8 @@
         function setupDataListeners() {
             onSnapshot(collection(db, `artifacts/${appId}/public/data/products`), (snapshot) => {
                 products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                products.sort((a, b) => a.name.localeCompare(b.name));
+                // Sort by the new order field
+                products.sort((a, b) => (a.order || 0) - (b.order || 0));
                 if (!selectedProductId && products.length > 0) selectedProductId = products[0].id;
                 render();
             }, (err) => console.error("Product listener error:", err));
@@ -339,8 +344,8 @@
                     const kilnerInput = Number(specials.raspberryDaisyKilner) || 0;
                     const btlInput = Number(specials.raspberryDaisyBtl) || 0;
                     
-                    total += (kilnerInput * 8400 * (1 / 2)) / 700;
-                    total += (btlInput * 700 * (1 / 2)) / 700;
+                    total += (kilnerInput * 8400 * (7 / 12)) / 700;
+                    total += (btlInput * 700 * (7 / 12)) / 700;
                 } else if (productNameLower === "blend passionfruit") {
                     const kilnerInput = Number(specials.pergolaKilner) || 0;
                     const btlInput = Number(specials.pergolaBtl) || 0;
@@ -450,16 +455,29 @@
             if (products.length === 0) {
                 list.innerHTML = `<li>No products yet.</li>`;
             } else {
-                products.forEach(product => {
+                products.forEach((product, index) => {
                     const item = document.createElement('li');
-                    item.className = 'flex flex-col sm:flex-row justify-between items-start sm:items-center p-2 rounded-md hover:bg-gray-100 gap-2';
+                    item.className = 'flex items-center p-2 rounded-md hover:bg-gray-100 gap-2';
                     item.innerHTML = `
-                        <span class="flex-grow">${product.name}</span>
+                        <div class="flex-grow">${product.name}</div>
                         <div class="flex items-center gap-2">
                             <label for="os-${product.id}" class="text-sm font-medium">Opening:</label>
                             <input type="number" id="os-${product.id}" data-id="${product.id}" value="${product.openingStock || 0}" class="opening-stock-input w-20 p-1 border rounded-md text-right">
-                            <button data-id="${product.id}" class="delete-product-btn text-red-500 hover:text-red-700 font-semibold text-sm">DELETE</button>
-                        </div>`;
+                        </div>
+                        <div class="flex items-center gap-1">
+                             <button data-id="${product.id}" data-direction="up" class="reorder-btn p-1" ${index === 0 ? 'disabled' : ''}>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-up-square" viewBox="0 0 16 16">
+                                  <path fill-rule="evenodd" d="M15 2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2zM0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm8.5 9.5a.5.5 0 0 1-1 0V5.707L5.354 7.854a.5.5 0 1 1-.708-.708l3-3a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 5.707V11.5z"/>
+                                </svg>
+                            </button>
+                            <button data-id="${product.id}" data-direction="down" class="reorder-btn p-1" ${index === products.length - 1 ? 'disabled' : ''}>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-down-square" viewBox="0 0 16 16">
+                                  <path fill-rule="evenodd" d="M15 2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2zM0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm8.5 2.5a.5.5 0 0 0-1 0v5.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V4.5z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <button data-id="${product.id}" class="delete-product-btn text-red-500 hover:text-red-700 font-semibold text-sm">DELETE</button>
+                    `;
                     list.appendChild(item);
                 });
             }
@@ -467,7 +485,10 @@
 
         function setupEventListeners() {
             document.body.addEventListener('click', async (e) => {
-                if (e.target.id === 'login-submit') {
+                const target = e.target.closest('button'); // Find the closest button element
+                if (!target) return;
+
+                if (target.id === 'login-submit') {
                     const emailInput = document.getElementById('email-input');
                     const passwordInput = document.getElementById('password-input');
                     const loginError = document.getElementById('login-error');
@@ -478,11 +499,12 @@
                         loginError.textContent = 'Login failed. Please check credentials.';
                     }
                 }
-                if (e.target.id === 'logout-button') await signOut(auth);
-                if (e.target.id === 'toggle-view-mode-btn') handleToggleViewMode();
-                if (e.target.classList.contains('delete-product-btn')) handleDeleteProduct(e);
-                if (e.target.id === 'add-product-btn') handleAddProduct();
-                if (e.target.classList.contains('nav-button')) handleNavClick(e);
+                if (target.id === 'logout-button') await signOut(auth);
+                if (target.id === 'toggle-view-mode-btn') handleToggleViewMode();
+                if (target.classList.contains('delete-product-btn')) handleDeleteProduct(target);
+                if (target.id === 'add-product-btn') handleAddProduct();
+                if (target.classList.contains('nav-button')) handleNavClick(target);
+                if (target.classList.contains('reorder-btn')) handleReorderProduct(target);
             });
 
             document.body.addEventListener('change', (e) => {
@@ -511,22 +533,51 @@
         function handleDayChange(e) { currentDay = e.target.value; render(); }
         function handleProductSelect(e) { selectedProductId = e.target.value; render(); }
         function handleToggleViewMode() { viewPageMode = viewPageMode === 'daily' ? 'weekly' : 'daily'; render(); }
-        function handleNavClick(e) { currentView = e.target.dataset.view; render(); }
+        function handleNavClick(target) { currentView = target.dataset.view; render(); }
 
         async function handleAddProduct() {
             const input = document.getElementById('new-product-name');
             const productName = input.value.trim();
             if (productName) {
-                await addDoc(collection(db, `artifacts/${appId}/public/data/products`), { name: productName, openingStock: 0 });
+                const maxOrder = products.reduce((max, p) => Math.max(max, p.order || 0), 0);
+                await addDoc(collection(db, `artifacts/${appId}/public/data/products`), { 
+                    name: productName, 
+                    openingStock: 0,
+                    order: products.length > 0 ? maxOrder + 1 : 1
+                });
                 input.value = '';
             }
         }
 
-        async function handleDeleteProduct(e) {
-            const productId = e.target.dataset.id;
+        async function handleDeleteProduct(target) {
+            const productId = target.dataset.id;
             const batch = writeBatch(db);
             batch.delete(doc(db, `artifacts/${appId}/public/data/products`, productId));
             batch.delete(doc(db, `artifacts/${appId}/public/data/counts`, productId));
+            await batch.commit();
+        }
+
+        async function handleReorderProduct(target) {
+            const productId = target.dataset.id;
+            const direction = target.dataset.direction;
+            const currentIndex = products.findIndex(p => p.id === productId);
+
+            if ((direction === 'up' && currentIndex === 0) || (direction === 'down' && currentIndex === products.length - 1)) {
+                return; // Can't move further
+            }
+
+            const otherIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+            
+            const productA = products[currentIndex];
+            const productB = products[otherIndex];
+
+            const batch = writeBatch(db);
+            const docARef = doc(db, `artifacts/${appId}/public/data/products`, productA.id);
+            const docBRef = doc(db, `artifacts/${appId}/public/data/products`, productB.id);
+
+            batch.update(docARef, { order: productB.order });
+            batch.update(docBRef, { order: productA.order });
+
             await batch.commit();
         }
 
