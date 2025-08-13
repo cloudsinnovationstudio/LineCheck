@@ -46,14 +46,41 @@
         .summary-table tr:nth-child(even) {
             background-color: #f9f9f9;
         }
+        /* Styles for the login overlay */
+        #login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
 
-    <div id="app" class="max-w-4xl mx-auto p-4">
+    <!-- Secure Login Overlay -->
+    <div id="login-overlay">
+        <div class="bg-white p-8 rounded-lg shadow-xl text-center w-full max-w-sm">
+            <h2 class="text-xl font-bold mb-4">Bar Stock Login</h2>
+            <input type="email" id="email-input" class="p-2 border rounded-md w-full mb-2" placeholder="Email">
+            <input type="password" id="password-input" class="p-2 border rounded-md w-full mb-4" placeholder="Password">
+            <button id="login-submit" class="bg-blue-500 text-white px-6 py-2 rounded-md shadow hover:bg-blue-600 w-full">Login</button>
+            <p id="login-error" class="text-red-500 mt-2 text-sm h-4"></p>
+        </div>
+    </div>
+
+    <div id="app" class="max-w-4xl mx-auto p-4" style="display: none;"> <!-- Main app is hidden initially -->
         
         <header class="bg-white rounded-lg shadow p-4 mb-6">
-            <h1 class="text-2xl font-bold text-center text-gray-700">Bar Stock Line Check</h1>
+            <div class="flex justify-between items-center">
+                <h1 class="text-2xl font-bold text-center text-gray-700 flex-grow">Bar Stock Line Check</h1>
+                <button id="logout-button" class="bg-red-500 text-white px-3 py-1 rounded-md shadow hover:bg-red-600 text-sm">Logout</button>
+            </div>
             <nav id="nav-buttons" class="flex justify-center space-x-2 mt-4">
                 <button data-view="input" class="nav-button bg-blue-500 text-white px-4 py-2 rounded-md shadow hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75">Input</button>
                 <button data-view="view" class="nav-button bg-gray-500 text-white px-4 py-2 rounded-md shadow hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75">View</button>
@@ -83,9 +110,7 @@
                     <select id="product-selector" class="flex-grow p-2 border rounded-md shadow-sm"></select>
                 </div>
             </div>
-            <div id="product-input-container" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- Location sections for selected product will be generated here -->
-            </div>
+            <div id="product-input-container" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
         </div>
     </template>
 
@@ -112,7 +137,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, collection, onSnapshot, addDoc, deleteDoc, setDoc, writeBatch, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -140,30 +165,65 @@
         const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
         let currentDay = days[(new Date().getDay() + 6) % 7];
 
-        async function main() {
+        function main() {
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
-            onAuthStateChanged(auth, async (user) => {
+
+            onAuthStateChanged(auth, (user) => {
+                const loginOverlay = document.getElementById('login-overlay');
+                const appContainer = document.getElementById('app');
                 if (user) {
+                    // User is signed in
                     userId = user.uid;
+                    loginOverlay.style.display = 'none';
+                    appContainer.style.display = 'block';
                     document.getElementById('loading').style.display = 'none';
                     setupGlobalEventListeners();
                     setupListeners();
                 } else {
-                    try {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await signInWithCustomToken(auth, __initial_auth_token);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                    } catch (error) {
-                        console.error("Error signing in:", error);
-                        document.getElementById('loading').innerHTML = '<p class="text-red-500">Error connecting.</p>';
-                    }
+                    // User is signed out
+                    loginOverlay.style.display = 'flex';
+                    appContainer.style.display = 'none';
+                }
+            });
+            
+            setupLogin();
+        }
+
+        function setupLogin() {
+            const emailInput = document.getElementById('email-input');
+            const passwordInput = document.getElementById('password-input');
+            const loginSubmit = document.getElementById('login-submit');
+            const loginError = document.getElementById('login-error');
+            const logoutButton = document.getElementById('logout-button');
+
+            const handleLogin = async () => {
+                loginError.textContent = '';
+                try {
+                    await signInWithEmailAndPassword(auth, emailInput.value, passwordInput.value);
+                    // onAuthStateChanged will handle showing the app
+                } catch (error) {
+                    console.error("Login failed:", error.message);
+                    loginError.textContent = 'Login failed. Please check email and password.';
+                }
+            };
+
+            loginSubmit.addEventListener('click', handleLogin);
+            passwordInput.addEventListener('keyup', (e) => {
+                if (e.key === 'Enter') handleLogin();
+            });
+            
+            logoutButton.addEventListener('click', async () => {
+                try {
+                    await signOut(auth);
+                    // onAuthStateChanged will handle showing the login screen
+                } catch (error) {
+                    console.error("Logout failed:", error);
                 }
             });
         }
+
 
         function setupListeners() {
             onSnapshot(collection(db, `artifacts/${appId}/public/data/products`), (snapshot) => {
@@ -464,7 +524,9 @@
             };
         }
 
+        // Start the app
         main();
+
     </script>
 </body>
 </html>
