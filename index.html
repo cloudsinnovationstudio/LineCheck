@@ -146,6 +146,8 @@
         let currentView = 'input';
         let viewPageMode = 'daily';
         let selectedProductId = null;
+        let dataListenersAttached = false;
+
         const locations = [
             { id: 'islandBar', name: 'Island Bar' },
             { id: 'mainBar', name: 'Main Bar' },
@@ -171,6 +173,8 @@
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
+            setupEventListeners(); // Setup all listeners once.
+            
             onAuthStateChanged(auth, (user) => {
                 const loginOverlay = document.getElementById('login-overlay');
                 const appContainer = document.getElementById('app');
@@ -179,35 +183,20 @@
                     loginOverlay.style.display = 'none';
                     appContainer.style.display = 'block';
                     document.getElementById('loading').style.display = 'none';
-                    setupGlobalEventListeners();
-                    setupListeners();
+                    if (!dataListenersAttached) {
+                        setupDataListeners();
+                        dataListenersAttached = true;
+                    }
                 } else {
+                    userId = null;
+                    dataListenersAttached = false; // Reset flag on logout
                     loginOverlay.style.display = 'flex';
                     appContainer.style.display = 'none';
                 }
             });
-            setupLogin();
         }
 
-        function setupLogin() {
-            const emailInput = document.getElementById('email-input');
-            const passwordInput = document.getElementById('password-input');
-            const loginSubmit = document.getElementById('login-submit');
-            const loginError = document.getElementById('login-error');
-            
-            const handleLogin = async () => {
-                loginError.textContent = '';
-                try {
-                    await signInWithEmailAndPassword(auth, emailInput.value, passwordInput.value);
-                } catch (error) {
-                    loginError.textContent = 'Login failed. Please check credentials.';
-                }
-            };
-            loginSubmit.addEventListener('click', handleLogin);
-            passwordInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') handleLogin(); });
-        }
-
-        function setupListeners() {
+        function setupDataListeners() {
             onSnapshot(collection(db, `artifacts/${appId}/public/data/products`), (snapshot) => {
                 products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 products.sort((a, b) => a.name.localeCompare(b.name));
@@ -421,38 +410,46 @@
             }
         }
 
-        function setupGlobalEventListeners() {
-            // **FIXED**: Logout button listener is now set up here, only when the user is logged in.
-            const logoutButton = document.getElementById('logout-button');
-            logoutButton.addEventListener('click', async () => { await signOut(auth); });
-
-            const mainContent = document.getElementById('main-content');
-            mainContent.addEventListener('change', (e) => {
-                if (e.target.id === 'day-selector') handleDayChange(e);
-                if (e.target.id === 'product-selector') handleProductSelect(e);
-            });
-            mainContent.addEventListener('click', (e) => {
+        function setupEventListeners() {
+            document.body.addEventListener('click', async (e) => {
+                if (e.target.id === 'login-submit') {
+                    const emailInput = document.getElementById('email-input');
+                    const passwordInput = document.getElementById('password-input');
+                    const loginError = document.getElementById('login-error');
+                    loginError.textContent = '';
+                    try {
+                        await signInWithEmailAndPassword(auth, emailInput.value, passwordInput.value);
+                    } catch (error) {
+                        loginError.textContent = 'Login failed. Please check credentials.';
+                    }
+                }
+                if (e.target.id === 'logout-button') await signOut(auth);
                 if (e.target.id === 'toggle-view-mode-btn') handleToggleViewMode();
                 if (e.target.classList.contains('delete-product-btn')) handleDeleteProduct(e);
                 if (e.target.id === 'add-product-btn') handleAddProduct();
+                if (e.target.classList.contains('nav-button')) handleNavClick(e);
             });
-            mainContent.addEventListener('keyup', (e) => {
+
+            document.body.addEventListener('change', (e) => {
+                if (e.target.id === 'day-selector') handleDayChange(e);
+                if (e.target.id === 'product-selector') handleProductSelect(e);
+            });
+
+            document.body.addEventListener('keyup', (e) => {
                 if (e.target.id === 'new-product-name' && e.key === 'Enter') handleAddProduct();
+                if (e.target.id === 'password-input' && e.key === 'Enter') document.getElementById('login-submit').click();
             });
-            mainContent.addEventListener('input', debounce((e) => {
+
+            document.body.addEventListener('input', debounce((e) => {
                 if (e.target.classList.contains('count-input')) handleCountChange(e);
                 if (e.target.classList.contains('special-input')) handleSpecialInputChange(e);
                 if (e.target.classList.contains('opening-stock-input')) handleOpeningStockChange(e);
             }, 500));
             
-            mainContent.addEventListener('focusin', (e) => {
+            document.body.addEventListener('focusin', (e) => {
                 if (e.target.tagName === 'INPUT' && e.target.type === 'number') {
                     e.target.select();
                 }
-            });
-
-            document.getElementById('nav-buttons').addEventListener('click', (e) => {
-                if (e.target.classList.contains('nav-button')) handleNavClick(e);
             });
         }
         
