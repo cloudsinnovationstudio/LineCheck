@@ -201,7 +201,7 @@
             const passwordInput = document.getElementById('password-input');
             const loginSubmit = document.getElementById('login-submit');
             const loginError = document.getElementById('login-error');
-            const logoutButton = document.getElementById('logout-button');
+            
             const handleLogin = async () => {
                 loginError.textContent = '';
                 try {
@@ -212,7 +212,6 @@
             };
             loginSubmit.addEventListener('click', handleLogin);
             passwordInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') handleLogin(); });
-            logoutButton.addEventListener('click', async () => { await signOut(auth); });
         }
 
         function setupListeners() {
@@ -221,12 +220,12 @@
                 products.sort((a, b) => a.name.localeCompare(b.name));
                 if (!selectedProductId && products.length > 0) selectedProductId = products[0].id;
                 render();
-            });
+            }, (err) => console.error("Product listener error:", err));
             onSnapshot(collection(db, `artifacts/${appId}/public/data/counts`), (snapshot) => {
                 counts = {};
                 snapshot.docs.forEach(doc => { counts[doc.id] = doc.data(); });
                 render();
-            });
+            }, (err) => console.error("Counts listener error:", err));
         }
 
         function render() {
@@ -420,6 +419,9 @@
         }
 
         function setupGlobalEventListeners() {
+            const logoutButton = document.getElementById('logout-button');
+            logoutButton.addEventListener('click', async () => { await signOut(auth); });
+
             const mainContent = document.getElementById('main-content');
             mainContent.addEventListener('change', (e) => {
                 if (e.target.id === 'day-selector') handleDayChange(e);
