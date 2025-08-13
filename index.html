@@ -138,14 +138,14 @@
         import { getFirestore, doc, collection, onSnapshot, addDoc, deleteDoc, setDoc, writeBatch, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
-  apiKey: "AIzaSyDTTRoipMen2gSn8s602nV_Ao_9MogDUK4",
-  authDomain: "linecheck-84928.firebaseapp.com",
-  projectId: "linecheck-84928",
-  storageBucket: "linecheck-84928.firebasestorage.app",
-  messagingSenderId: "348317364563",
-  appId: "1:348317364563:web:2d0e8bec52d5323ca0b1a6"
-};
-           const appId = typeof __app_id !== 'undefined' ? __app_id : 'bar-stock-counter';
+             apiKey: "AIzaSyDTTRoipMen2gSn8s602nV_Ao_9MogDUK4",
+             authDomain: "linecheck-84928.firebaseapp.com",
+             projectId: "linecheck-84928",
+             storageBucket: "linecheck-84928.appspot.com",
+             messagingSenderId: "348317364563",
+             appId: "1:348317364563:web:2d0e8bec52d5323ca0b1a6"
+        };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'bar-stock-counter';
 
         let db, auth, userId;
         let products = [];
@@ -380,8 +380,19 @@
             if (products.length === 0) return;
             const table = document.createElement('table');
             table.className = 'summary-table';
-            const headers = ['Product', 'Opening', ...days.map(d => d.slice(0, 3).toUpperCase())];
-            table.createTHead().insertRow().innerHTML = headers.map(h => `<th>${h}</th>`).join('');
+            const headers = ['Product', 'Opening', ...days];
+            const thead = table.createTHead();
+            const headerRow = thead.insertRow();
+            headers.forEach(headerText => {
+                const th = document.createElement('th');
+                const isCurrentDay = headerText.toLowerCase() === currentDay;
+                if (isCurrentDay) {
+                    th.className = 'bg-blue-200'; // Highlight class for header
+                }
+                th.textContent = headerText.length > 3 ? headerText.slice(0, 3).toUpperCase() : headerText;
+                headerRow.appendChild(th);
+            });
+
             const tbody = table.createTBody();
             products.forEach(product => {
                 const row = tbody.insertRow();
@@ -389,7 +400,11 @@
                 row.insertCell().textContent = product.openingStock || 0;
                 days.forEach(day => {
                     const total = calculateProductTotal(product.id, day);
-                    row.insertCell().textContent = total.toFixed(2);
+                    const cell = row.insertCell();
+                    cell.textContent = total.toFixed(2);
+                    if (day === currentDay) {
+                        cell.className = 'bg-blue-100'; // Lighter highlight for data cells
+                    }
                 });
             });
             container.appendChild(table);
@@ -522,4 +537,4 @@
         main();
     </script>
 </body>
-</html>
+</ht
