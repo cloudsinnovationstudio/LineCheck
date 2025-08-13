@@ -268,14 +268,12 @@
             const container = document.getElementById('product-input-container');
             if (!productSelector || !roomSelector || !container) return;
 
-            // Populate selectors
             productSelector.innerHTML = '<option value="">Select a product...</option>';
             products.forEach(p => productSelector.add(new Option(p.name, p.id)));
             
             roomSelector.innerHTML = '<option value="">Select a room...</option>';
             locations.forEach(l => roomSelector.add(new Option(l.name, l.id)));
 
-            // Set state and render content
             container.innerHTML = '';
             if (inputMode === 'byProduct') {
                 productSelector.value = selectedProductId;
@@ -620,12 +618,18 @@
             const productA = products[currentIndex];
             const productB = products[otherIndex];
 
+            // Safeguard: Ensure both products have an order value before swapping.
+            // If a product is missing an order, assign it its current index + 1 (to avoid 0).
+            const orderA = productA.order !== undefined ? productA.order : currentIndex + 1;
+            const orderB = productB.order !== undefined ? productB.order : otherIndex + 1;
+
             const batch = writeBatch(db);
             const docARef = doc(db, `artifacts/${appId}/public/data/products`, productA.id);
             const docBRef = doc(db, `artifacts/${appId}/public/data/products`, productB.id);
 
-            batch.update(docARef, { order: productB.order });
-            batch.update(docBRef, { order: productA.order });
+            // Swap the determined order values
+            batch.update(docARef, { order: orderB });
+            batch.update(docBRef, { order: orderA });
 
             await batch.commit();
         }
@@ -670,4 +674,4 @@
         main();
     </script>
 </body>
-</html>
+</ht
