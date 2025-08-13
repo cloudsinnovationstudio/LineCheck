@@ -147,13 +147,7 @@
 };
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'bar-stock-counter';
 
-        let db, auth, userId;
-        let products = [];
-        let counts = {};
-        let currentView = 'input';
-        let viewPageMode = 'daily';
-        let selectedProductId = null;
-        const locations = [const firebaseConfig = {
+        let db, auth, userId;const firebaseConfig = {
   apiKey: "AIzaSyDTTRoipMen2gSn8s602nV_Ao_9MogDUK4",
   authDomain: "linecheck-84928.firebaseapp.com",
   projectId: "linecheck-84928",
@@ -161,6 +155,12 @@
   messagingSenderId: "348317364563",
   appId: "1:348317364563:web:2d0e8bec52d5323ca0b1a6"
 };
+        let products = [];
+        let counts = {};
+        let currentView = 'input';
+        let viewPageMode = 'daily';
+        let selectedProductId = null;
+        const locations = [
             { id: 'islandBar', name: 'Island Bar' },
             { id: 'mainBar', name: 'Main Bar' },
             { id: 'coldRoom', name: 'Cold Room' },
@@ -268,32 +268,39 @@
             standardContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
             locations.forEach(location => {
                 const count = counts[selectedProductId]?.[currentDay]?.[location.id] || 0;
-                standardContainer.innerHTML += `
-                    <div class="bg-white rounded-lg shadow p-6">
-                        <h3 class="text-lg font-bold mb-4">${location.name}</h3>
-                        <div class="flex items-center justify-between">
-                            <label for="${location.id}-${selectedProductId}" class="text-sm">Count</label>
-                            <input type="number" id="${location.id}-${selectedProductId}" data-product-id="${selectedProductId}" data-location-id="${location.id}" value="${count}" class="count-input w-20 p-1 border rounded-md text-right">
-                        </div>
+                const locationEl = document.createElement('div');
+                locationEl.className = 'bg-white rounded-lg shadow p-6';
+                locationEl.innerHTML = `
+                    <h3 class="text-lg font-bold mb-4">${location.name}</h3>
+                    <div class="flex items-center justify-between">
+                        <label for="${location.id}-${selectedProductId}" class="text-sm">Count</label>
+                        <input type="number" id="${location.id}-${selectedProductId}" data-product-id="${selectedProductId}" data-location-id="${location.id}" value="${count}" class="count-input w-20 p-1 border rounded-md text-right">
                     </div>`;
+                standardContainer.appendChild(locationEl);
             });
             container.appendChild(standardContainer);
             
             if (isSpecialProduct) {
+                const specialContainerWrapper = document.createElement('div');
+                specialContainerWrapper.className = 'mt-6';
+                specialContainerWrapper.innerHTML = `<h3 class="text-lg font-bold mb-4">Batch & Slushie Inputs</h3>`;
+                
                 const specialContainer = document.createElement('div');
-                specialContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6 mt-6';
-                specialContainer.innerHTML += `<h3 class="text-lg font-bold md:col-span-2">Batch & Slushie Inputs</h3>`;
+                specialContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
+
                 specialInputs.forEach(input => {
                     const count = counts[selectedProductId]?.[currentDay]?.specialInputs?.[input.id] || 0;
-                    specialContainer.innerHTML += `
-                        <div class="bg-white rounded-lg shadow p-6">
-                            <div class="flex items-center justify-between">
-                                <label for="${input.id}-${selectedProductId}" class="text-sm">${input.name}</label>
-                                <input type="number" id="${input.id}-${selectedProductId}" data-product-id="${selectedProductId}" data-special-id="${input.id}" value="${count}" class="special-input w-20 p-1 border rounded-md text-right">
-                            </div>
+                    const specialEl = document.createElement('div');
+                    specialEl.className = 'bg-white rounded-lg shadow p-6';
+                    specialEl.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <label for="${input.id}-${selectedProductId}" class="text-sm">${input.name}</label>
+                            <input type="number" id="${input.id}-${selectedProductId}" data-product-id="${selectedProductId}" data-special-id="${input.id}" value="${count}" class="special-input w-20 p-1 border rounded-md text-right">
                         </div>`;
+                    specialContainer.appendChild(specialEl);
                 });
-                container.appendChild(specialContainer);
+                specialContainerWrapper.appendChild(specialContainer);
+                container.appendChild(specialContainerWrapper);
             }
         }
 
@@ -325,17 +332,25 @@
             if (!controls || !content) return;
             controls.innerHTML = '';
             content.innerHTML = '';
+            
             const toggleBtn = document.createElement('button');
             toggleBtn.id = 'toggle-view-mode-btn';
             toggleBtn.className = 'bg-indigo-500 text-white px-4 py-2 rounded-md shadow';
+
             if (viewPageMode === 'daily') {
                 toggleBtn.textContent = 'Show Weekly Summary';
-                controls.innerHTML = `<div class="flex items-center space-x-2"><label for="day-selector" class="font-semibold">Day:</label><select id="day-selector" class="p-2 border rounded-md"></select></div>`;
+                const daySelectorContainer = document.createElement('div');
+                daySelectorContainer.className = 'flex items-center space-x-2';
+                daySelectorContainer.innerHTML = `<label for="day-selector" class="font-semibold">Day:</label><select id="day-selector" class="p-2 border rounded-md"></select>`;
+                controls.appendChild(daySelectorContainer);
                 renderDaySelector('day-selector');
                 renderDailyTotals(content);
             } else {
                 toggleBtn.textContent = 'Show Daily View';
-                controls.innerHTML = `<h2 class="text-xl font-bold">Weekly Summary</h2>`;
+                const title = document.createElement('h2');
+                title.className = 'text-xl font-bold';
+                title.textContent = 'Weekly Summary';
+                controls.appendChild(title);
                 renderWeeklySummary(content);
             }
             controls.appendChild(toggleBtn);
@@ -348,7 +363,10 @@
             list.className = 'space-y-2';
             products.forEach(product => {
                 const total = calculateProductTotal(product.id, currentDay);
-                list.innerHTML += `<li class="flex justify-between items-center p-2 rounded-md even:bg-gray-50"><span>${product.name}</span><span class="font-bold text-lg">${total.toFixed(2)}</span></li>`;
+                const item = document.createElement('li');
+                item.className = 'flex justify-between items-center p-2 rounded-md even:bg-gray-50';
+                item.innerHTML = `<span>${product.name}</span><span class="font-bold text-lg">${total.toFixed(2)}</span>`;
+                list.appendChild(item);
             });
             container.appendChild(list);
         }
@@ -377,18 +395,20 @@
             const list = document.getElementById('product-list');
             if (!list) return;
             list.innerHTML = '';
-            if (products.length === 0) list.innerHTML = `<li>No products yet.</li>`;
-            else {
+            if (products.length === 0) {
+                list.innerHTML = `<li>No products yet.</li>`;
+            } else {
                 products.forEach(product => {
-                    list.innerHTML += `
-                        <li class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-2 rounded-md hover:bg-gray-100 gap-2">
-                            <span class="flex-grow">${product.name}</span>
-                            <div class="flex items-center gap-2">
-                                <label for="os-${product.id}" class="text-sm font-medium">Opening:</label>
-                                <input type="number" id="os-${product.id}" data-id="${product.id}" value="${product.openingStock || 0}" class="opening-stock-input w-20 p-1 border rounded-md text-right">
-                                <button data-id="${product.id}" class="delete-product-btn text-red-500 hover:text-red-700 font-semibold text-sm">DELETE</button>
-                            </div>
-                        </li>`;
+                    const item = document.createElement('li');
+                    item.className = 'flex flex-col sm:flex-row justify-between items-start sm:items-center p-2 rounded-md hover:bg-gray-100 gap-2';
+                    item.innerHTML = `
+                        <span class="flex-grow">${product.name}</span>
+                        <div class="flex items-center gap-2">
+                            <label for="os-${product.id}" class="text-sm font-medium">Opening:</label>
+                            <input type="number" id="os-${product.id}" data-id="${product.id}" value="${product.openingStock || 0}" class="opening-stock-input w-20 p-1 border rounded-md text-right">
+                            <button data-id="${product.id}" class="delete-product-btn text-red-500 hover:text-red-700 font-semibold text-sm">DELETE</button>
+                        </div>`;
+                    list.appendChild(item);
                 });
             }
         }
@@ -413,7 +433,6 @@
                 if (e.target.classList.contains('opening-stock-input')) handleOpeningStockChange(e);
             }, 500));
             
-            // **ADDED**: Event listener to highlight text on focus
             mainContent.addEventListener('focusin', (e) => {
                 if (e.target.tagName === 'INPUT' && e.target.type === 'number') {
                     e.target.select();
@@ -458,7 +477,6 @@
             const { productId, specialId } = e.target.dataset;
             const value = e.target.value;
             const countRef = doc(db, `artifacts/${appId}/public/data/counts`, productId);
-            const fieldPath = `${currentDay}.specialInputs.${specialId}`;
             await setDoc(countRef, { [currentDay]: { specialInputs: { [specialId]: Number(value) || 0 } } }, { merge: true });
         }
 
