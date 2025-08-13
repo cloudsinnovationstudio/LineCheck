@@ -162,23 +162,30 @@
             { id: 'kegRoom', name: 'Keg Room' }
         ];
         const specialProductConfig = {
-            "Ron Santiago 8YO": [
+            "ron santiago 8yo": [
                 { id: 'pergolaKilner', name: 'Pergola Punch Batch Kilner' },
                 { id: 'pergolaBtl', name: 'Pergola Punch Batch BTL' },
                 { id: 'strawberrySlushie', name: 'Strawberry Daquiri Slushie' },
                 { id: 'pinaColadaSlushie', name: 'Pina Colada Slushie' }
             ],
-            "Absolut Raspberri": [
+            "absolut raspberri": [
                 { id: 'raspberryDaisyKilner', name: 'Raspberry Daisy Kilner' },
                 { id: 'raspberryDaisyBtl', name: 'Raspberry Daisy BTL' }
             ],
-            "Blend Passionfruit": [
+            "blend passionfruit": [
                 { id: 'pergolaKilner', name: 'Pergola Punch Batch Kilner' },
                 { id: 'pergolaBtl', name: 'Pergola Punch Batch BTL' }
             ],
-            "Creme de Mure": [
+            "creme de mure": [
                 { id: 'raspberryDaisyKilner', name: 'Raspberry Daisy Kilner' },
                 { id: 'raspberryDaisyBtl', name: 'Raspberry Daisy BTL' }
+            ],
+            "funkin passionfruit": [
+                { id: 'pureeBtl', name: 'Puree BTL' },
+                { id: 'pergolaPunchJuiceBatch', name: 'Pergola Punch Juice Batch' }
+            ],
+            "pineapple juice": [
+                { id: 'pergolaPunchJuiceBatch', name: 'Pergola Punch Juice Batch' }
             ]
         };
         const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
@@ -266,7 +273,7 @@
             }
 
             const selectedProduct = products.find(p => p.id === selectedProductId);
-            const specialInputsForProduct = selectedProduct ? specialProductConfig[selectedProduct.name] : null;
+            const specialInputsForProduct = selectedProduct ? specialProductConfig[selectedProduct.name.toLowerCase()] : null;
 
             const standardContainer = document.createElement('div');
             standardContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
@@ -287,7 +294,7 @@
             if (specialInputsForProduct) {
                 const specialContainerWrapper = document.createElement('div');
                 specialContainerWrapper.className = 'mt-6';
-                specialContainerWrapper.innerHTML = `<h3 class="text-lg font-bold mb-4">Batch & Slushie Inputs</h3>`;
+                specialContainerWrapper.innerHTML = `<h3 class="text-lg font-bold mb-4">Batch & Special Inputs</h3>`;
                 
                 const specialContainer = document.createElement('div');
                 specialContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
@@ -316,7 +323,9 @@
             
             if (product && dayCounts.specialInputs) {
                 const specials = dayCounts.specialInputs;
-                if (product.name === "Ron Santiago 8YO") {
+                const productNameLower = product.name.toLowerCase();
+
+                if (productNameLower === "ron santiago 8yo") {
                     const kilnerInput = Number(specials.pergolaKilner) || 0;
                     const btlInput = Number(specials.pergolaBtl) || 0;
                     const strawberryInput = Number(specials.strawberrySlushie) || 0;
@@ -326,18 +335,28 @@
                     total += (btlInput * 700 * (7 / 12)) / 700;
                     total += (strawberryInput * 10000 * (350 / 2350)) / 700;
                     total += (pinaInput * 10000 * (350 / 2350)) / 700;
-                } else if (product.name === "Absolut Raspberri" || product.name === "Creme de Mure") {
+                } else if (productNameLower === "absolut raspberri" || productNameLower === "creme de mure") {
                     const kilnerInput = Number(specials.raspberryDaisyKilner) || 0;
                     const btlInput = Number(specials.raspberryDaisyBtl) || 0;
                     
-                    total += (kilnerInput * 8400 * (7 / 12)) / 700;
-                    total += (btlInput * 700 * (7 / 12)) / 700;
-                } else if (product.name === "Blend Passionfruit") {
+                    total += (kilnerInput * 8400 * (1 / 2)) / 700;
+                    total += (btlInput * 700 * (1 / 2)) / 700;
+                } else if (productNameLower === "blend passionfruit") {
                     const kilnerInput = Number(specials.pergolaKilner) || 0;
                     const btlInput = Number(specials.pergolaBtl) || 0;
 
                     total += (kilnerInput * 8400 * (5 / 12)) / 700;
                     total += (btlInput * 700 * (5 / 12)) / 700;
+                } else if (productNameLower === "funkin passionfruit") {
+                    const pureeInput = Number(specials.pureeBtl) || 0;
+                    const juiceBatchInput = Number(specials.pergolaPunchJuiceBatch) || 0;
+                    
+                    total += pureeInput * (7/10);
+                    total += juiceBatchInput * 10 * (25/85);
+                } else if (productNameLower === "pineapple juice") {
+                    const juiceBatchInput = Number(specials.pergolaPunchJuiceBatch) || 0;
+                    
+                    total += juiceBatchInput * 10 * (35/85);
                 }
             }
             
