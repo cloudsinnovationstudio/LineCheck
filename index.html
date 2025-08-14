@@ -659,7 +659,7 @@
                 if (e.target.classList.contains('count-input')) handleCountChange(e);
                 if (e.target.classList.contains('special-input')) handleSpecialInputChange(e);
                 if (e.target.classList.contains('opening-stock-input')) handleOpeningStockChange(e);
-            }, 1500));
+            }, 3000));
             
             document.body.addEventListener('focusin', (e) => {
                 if (e.target.tagName === 'INPUT' && e.target.type === 'number') {
@@ -777,14 +777,14 @@
             const { productId, locationId } = e.target.dataset;
             const value = e.target.value;
             const countRef = doc(db, 'counts', productId);
-            await setDoc(countRef, { [currentDay]: { [locationId]: Number(value) || 0 } }, { merge: true });
+            await setDoc(countRef, { [`${currentDay}.${locationId}`]: Number(value) || 0 }, { merge: true });
         }
 
         async function handleSpecialInputChange(e) {
             const { productId, specialId } = e.target.dataset;
             const value = e.target.value;
             const countRef = doc(db, 'counts', productId);
-            await setDoc(countRef, { [currentDay]: { specialInputs: { [specialId]: Number(value) || 0 } } }, { merge: true });
+            await setDoc(countRef, { [`${currentDay}.specialInputs.${specialId}`]: Number(value) || 0 }, { merge: true });
         }
 
         async function handleOpeningStockChange(e) {
@@ -834,4 +834,5 @@
         main();
     </script>
 </body>
-</ht
+</html>
+
