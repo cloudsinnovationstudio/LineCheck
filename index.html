@@ -18,6 +18,7 @@
             --accent-hover: #16a34a;
             --table-highlight: #047857;
             --table-highlight-faint: #065f46;
+            --danger-color: #991b1b;
         }
 
         [data-theme="light"] {
@@ -31,6 +32,7 @@
             --accent-hover: #15803d;
             --table-highlight: #a7f3d0;
             --table-highlight-faint: #d1fae5;
+            --danger-color: #f87171;
         }
 
         body {
@@ -535,12 +537,34 @@
             const headers = ['Product', 'Opening', ...days];
             const thead = table.createTHead();
             const headerRow = thead.insertRow();
+            const currentDayIndex = days.indexOf(currentDay);
+
             headers.forEach(headerText => {
                 const th = document.createElement('th');
-                const isCurrentDay = headerText.toLowerCase() === currentDay;
-                if (isCurrentDay) {
+                const day = headerText.toLowerCase();
+                const dayIndex = days.indexOf(day);
+
+                let wasMissed = false;
+                if (dayIndex !== -1 && dayIndex < currentDayIndex) {
+                    const allZero = products.every(product => calculateProductTotal(product.id, day) === 0);
+                    if (allZero) {
+                        wasMissed = true;
+                    }
+                }
+
+                if (wasMissed) {
+                    th.style.backgroundColor = 'var(--danger-color)';
+                    th.style.color = 'white';
+                } else if (day === currentDay) {
                     th.style.backgroundColor = 'var(--table-highlight)';
                 }
+
+                if (headerText === 'Opening') {
+                    th.classList.add('font-bold');
+                }
+
+ th.classList.add('text-center');
+
                 th.textContent = headerText.length > 3 ? headerText.slice(0, 3).toUpperCase() : headerText;
                 headerRow.appendChild(th);
             });
@@ -549,7 +573,9 @@
             products.forEach(product => {
                 const row = tbody.insertRow();
                 row.insertCell().textContent = product.name;
-                row.insertCell().textContent = product.openingStock || 0;
+                const openingCell = row.insertCell();
+                openingCell.textContent = product.openingStock || 0;
+                openingCell.classList.add('font-bold');
                 days.forEach(day => {
                     const total = calculateProductTotal(product.id, day);
                     const cell = row.insertCell();
