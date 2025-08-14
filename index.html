@@ -7,12 +7,40 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-primary: #111827;
+            --bg-secondary: #1f2937;
+            --bg-tertiary: #374151;
+            --text-primary: #d1d5db;
+            --text-secondary: #9ca3af;
+            --border-color: #4b5563;
+            --accent-color: #22c55e;
+            --accent-hover: #16a34a;
+            --table-highlight: #047857;
+            --table-highlight-faint: #065f46;
+        }
+
+        [data-theme="light"] {
+            --bg-primary: #f3f4f6;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f3f4f6; /* Changed for better contrast */
+            --text-primary: #1f2937;
+            --text-secondary: #4b5563;
+            --border-color: #d1d5db;
+            --accent-color: #166534;
+            --accent-hover: #15803d;
+            --table-highlight: #a7f3d0;
+            --table-highlight-faint: #d1fae5;
+        }
+
         body {
             font-family: 'Inter', sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
         }
         .loader {
-            border: 4px solid #4a5568;
-            border-top: 4px solid #22c55e;
+            border: 4px solid var(--bg-tertiary);
+            border-top: 4px solid var(--accent-color);
             border-radius: 50%;
             width: 24px;
             height: 24px;
@@ -31,20 +59,20 @@
             display: block;
         }
         .summary-table th, .summary-table td {
-            border: 1px solid #4a5568;
+            border: 1px solid var(--border-color);
             padding: 8px;
             text-align: left;
             white-space: nowrap;
         }
         .summary-table th {
-            background-color: #1f2937;
+            background-color: var(--bg-secondary);
             font-weight: 600;
         }
         .summary-table td:not(:first-child) {
             text-align: center;
         }
         .summary-table tr:nth-child(even) {
-            background-color: #374151;
+            background-color: var(--bg-tertiary);
         }
         #login-overlay {
             position: fixed;
@@ -60,30 +88,38 @@
         }
         .dragging {
             opacity: 0.5;
-            background: #1f2937;
+            background: var(--bg-tertiary);
         }
         .handle {
             cursor: grab;
         }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-300">
+<body>
 
     <div id="login-overlay">
-        <div class="bg-gray-800 p-8 rounded-lg shadow-xl text-center w-full max-w-sm border border-gray-700">
-            <h2 class="text-xl font-bold mb-4 text-white">Line Check Login</h2>
-            <input type="email" id="email-input" class="bg-gray-700 text-white p-2 border border-gray-600 rounded-md w-full mb-2" placeholder="Email">
-            <input type="password" id="password-input" class="bg-gray-700 text-white p-2 border border-gray-600 rounded-md w-full mb-4" placeholder="Password">
-            <button id="login-submit" class="bg-green-600 text-white px-6 py-2 rounded-md shadow hover:bg-green-700 w-full">Login</button>
+        <div class="p-8 rounded-lg shadow-xl text-center w-full max-w-sm border" style="background-color: var(--bg-secondary); border-color: var(--border-color);">
+            <h2 class="text-xl font-bold mb-4" style="color: var(--text-primary);">Line Check Login</h2>
+            <input type="email" id="email-input" class="p-2 border rounded-md w-full mb-2" style="background-color: var(--bg-tertiary); border-color: var(--border-color);" placeholder="Email">
+            <input type="password" id="password-input" class="p-2 border rounded-md w-full mb-4" style="background-color: var(--bg-tertiary); border-color: var(--border-color);" placeholder="Password">
+            <button id="login-submit" class="text-white px-6 py-2 rounded-md shadow w-full" style="background-color: var(--accent-color);">Login</button>
             <p id="login-error" class="text-red-400 mt-2 text-sm h-4"></p>
         </div>
     </div>
 
     <div id="app" class="max-w-4xl mx-auto p-4" style="display: none;">
         
-        <header class="bg-gray-800 rounded-lg shadow p-4 mb-6 border border-gray-700">
+        <header class="rounded-lg shadow p-4 mb-6 border" style="background-color: var(--bg-secondary); border-color: var(--border-color);">
             <div class="flex justify-between items-center">
-                <h1 class="text-2xl font-bold text-center text-white flex-grow">Line Check</h1>
+                <button id="theme-toggle" class="p-2 rounded-full hover:bg-gray-700">
+                    <svg id="theme-icon-dark" xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-moon-fill" viewBox="0 0 16 16">
+                        <path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/>
+                    </svg>
+                    <svg id="theme-icon-light" xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-sun-fill hidden" viewBox="0 0 16 16">
+                        <path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707z"/>
+                    </svg>
+                </button>
+                <h1 class="text-2xl font-bold text-center flex-grow" style="color: var(--text-primary);">Line Check</h1>
                 <button id="logout-button" class="bg-red-600 text-white px-3 py-1 rounded-md shadow hover:bg-red-700 text-sm">Logout</button>
             </div>
             <nav id="nav-buttons" class="flex justify-center space-x-2 mt-4">
@@ -104,17 +140,17 @@
 
     <template id="input-view-template">
         <div id="input-view" class="space-y-6">
-            <div class="bg-gray-800 p-4 rounded-lg shadow space-y-4 border border-gray-700">
+            <div class="p-4 rounded-lg shadow space-y-4 border" style="background-color: var(--bg-secondary); border-color: var(--border-color);">
                 <div class="flex items-center space-x-2">
                     <label for="day-selector" class="font-semibold">Select Day:</label>
-                    <select id="day-selector" class="bg-gray-700 p-2 border border-gray-600 rounded-md shadow-sm"></select>
+                    <select id="day-selector" class="p-2 border rounded-md shadow-sm" style="background-color: var(--bg-tertiary); border-color: var(--border-color);"></select>
                 </div>
-                <hr class="border-gray-700"/>
+                <hr style="border-color: var(--border-color);"/>
                 <div class="flex items-center space-x-2">
                      <label class="font-semibold w-28">Input Mode:</label>
                     <div class="flex rounded-md shadow-sm">
-                        <button data-mode="byProduct" class="input-mode-btn px-4 py-2 rounded-l-md border border-gray-600">By Product</button>
-                        <button data-mode="byRoom" class="input-mode-btn px-4 py-2 rounded-r-md border border-gray-600 -ml-px">By Room</button>
+                        <button data-mode="byProduct" class="input-mode-btn px-4 py-2 rounded-l-md border" style="border-color: var(--border-color);">By Product</button>
+                        <button data-mode="byRoom" class="input-mode-btn px-4 py-2 rounded-r-md border -ml-px" style="border-color: var(--border-color);">By Room</button>
                     </div>
                 </div>
                 <div id="selector-container" class="flex items-center space-x-2">
@@ -126,18 +162,18 @@
     </template>
 
     <template id="view-view-template">
-        <div id="view-view" class="bg-gray-800 rounded-lg shadow p-6 border border-gray-700">
+        <div id="view-view" class="rounded-lg shadow p-6 border" style="background-color: var(--bg-secondary); border-color: var(--border-color);">
             <div id="view-controls" class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4"></div>
             <div id="view-content-container"></div>
         </div>
     </template>
 
     <template id="configure-view-template">
-        <div id="configure-view" class="bg-gray-800 rounded-lg shadow p-6 border border-gray-700">
+        <div id="configure-view" class="rounded-lg shadow p-6 border" style="background-color: var(--bg-secondary); border-color: var(--border-color);">
             <h2 class="text-xl font-bold mb-4">Configure Products</h2>
             <div class="flex flex-col sm:flex-row gap-2 mb-6">
-                <input type="text" id="new-product-name" class="bg-gray-700 flex-grow p-2 border border-gray-600 rounded-md" placeholder="Enter new product name">
-                <button id="add-product-btn" class="bg-green-600 text-white px-4 py-2 rounded-md shadow hover:bg-green-700">Add Product</button>
+                <input type="text" id="new-product-name" class="flex-grow p-2 border rounded-md" style="background-color: var(--bg-tertiary); border-color: var(--border-color);" placeholder="Enter new product name">
+                <button id="add-product-btn" class="text-white px-4 py-2 rounded-md shadow" style="background-color: var(--accent-color);">Add Product</button>
             </div>
             <div id="product-list-container">
                 <h3 class="font-semibold mb-2">Current Products:</h3>
@@ -211,6 +247,7 @@
             db = getFirestore(app);
             auth = getAuth(app);
             setupEventListeners();
+            applyInitialTheme();
             
             onAuthStateChanged(auth, (user) => {
                 const loginOverlay = document.getElementById('login-overlay');
@@ -286,6 +323,7 @@
                 btn.classList.toggle('bg-green-600', isActive);
                 btn.classList.toggle('text-white', isActive);
                 btn.classList.toggle('bg-gray-700', !isActive);
+                btn.classList.toggle('text-gray-300', !isActive);
             });
 
             selectorContainer.innerHTML = '';
@@ -294,26 +332,26 @@
             if (inputMode === 'byProduct') {
                 selectorContainer.innerHTML = `
                     <label for="product-selector" class="font-semibold w-28">By Product:</label>
-                    <select id="product-selector" class="bg-gray-700 flex-grow p-2 border border-gray-600 rounded-md shadow-sm"></select>`;
+                    <select id="product-selector" class="flex-grow p-2 border rounded-md shadow-sm" style="background-color: var(--bg-tertiary); border-color: var(--border-color);"></select>`;
                 const productSelector = document.getElementById('product-selector');
                 productSelector.innerHTML = '<option value="">Select a product...</option>';
                 products.forEach(p => productSelector.add(new Option(p.name, p.id)));
                 productSelector.value = selectedProductId;
                 if (!selectedProductId) {
-                    container.innerHTML = `<p class="text-center p-4 bg-gray-800 rounded-lg shadow border border-gray-700">Please select a product.</p>`;
+                    container.innerHTML = `<p class="text-center p-4 rounded-lg shadow border" style="background-color: var(--bg-secondary); border-color: var(--border-color);">Please select a product.</p>`;
                 } else {
                     renderInputByProduct(container);
                 }
             } else { // byRoom
                 selectorContainer.innerHTML = `
                     <label for="room-selector" class="font-semibold w-28">By Room:</label>
-                    <select id="room-selector" class="bg-gray-700 flex-grow p-2 border border-gray-600 rounded-md shadow-sm"></select>`;
+                    <select id="room-selector" class="flex-grow p-2 border rounded-md shadow-sm" style="background-color: var(--bg-tertiary); border-color: var(--border-color);"></select>`;
                 const roomSelector = document.getElementById('room-selector');
                 roomSelector.innerHTML = '<option value="">Select a room...</option>';
                 locations.forEach(l => roomSelector.add(new Option(l.name, l.id)));
                 roomSelector.value = selectedRoomId;
                  if (!selectedRoomId) {
-                    container.innerHTML = `<p class="text-center p-4 bg-gray-800 rounded-lg shadow border border-gray-700">Please select a room.</p>`;
+                    container.innerHTML = `<p class="text-center p-4 rounded-lg shadow border" style="background-color: var(--bg-secondary); border-color: var(--border-color);">Please select a room.</p>`;
                 } else {
                     renderInputByRoom(container);
                 }
@@ -329,12 +367,14 @@
             locations.forEach(location => {
                 const count = counts[selectedProductId]?.[currentDay]?.[location.id] || 0;
                 const locationEl = document.createElement('div');
-                locationEl.className = 'bg-gray-800 rounded-lg shadow p-6 border border-gray-700';
+                locationEl.className = 'rounded-lg shadow p-6 border';
+                locationEl.style.backgroundColor = 'var(--bg-secondary)';
+                locationEl.style.borderColor = 'var(--border-color)';
                 locationEl.innerHTML = `
                     <h3 class="text-lg font-bold mb-4">${location.name}</h3>
                     <div class="flex items-center justify-between">
                         <label for="${location.id}-${selectedProductId}" class="text-sm">Count</label>
-                        <input type="number" id="${location.id}-${selectedProductId}" data-product-id="${selectedProductId}" data-location-id="${location.id}" value="${count}" class="count-input w-20 p-1 border border-gray-600 bg-gray-700 rounded-md text-right">
+                        <input type="number" id="${location.id}-${selectedProductId}" data-product-id="${selectedProductId}" data-location-id="${location.id}" value="${count}" class="count-input w-20 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);">
                     </div>`;
                 standardContainer.appendChild(locationEl);
             });
@@ -349,11 +389,13 @@
                 specialInputsForProduct.forEach(input => {
                     const count = counts[selectedProductId]?.[currentDay]?.specialInputs?.[input.id] || 0;
                     const specialEl = document.createElement('div');
-                    specialEl.className = 'bg-gray-800 rounded-lg shadow p-6 border border-gray-700';
+                    specialEl.className = 'rounded-lg shadow p-6 border';
+                    specialEl.style.backgroundColor = 'var(--bg-secondary)';
+                    specialEl.style.borderColor = 'var(--border-color)';
                     specialEl.innerHTML = `
                         <div class="flex items-center justify-between">
                             <label for="${input.id}-${selectedProductId}" class="text-sm">${input.name}</label>
-                            <input type="number" id="${input.id}-${selectedProductId}" data-product-id="${selectedProductId}" data-special-id="${input.id}" value="${count}" class="special-input w-20 p-1 border border-gray-600 bg-gray-700 rounded-md text-right">
+                            <input type="number" id="${input.id}-${selectedProductId}" data-product-id="${selectedProductId}" data-special-id="${input.id}" value="${count}" class="special-input w-20 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);">
                         </div>`;
                     specialContainer.appendChild(specialEl);
                 });
@@ -365,7 +407,9 @@
         function renderInputByRoom(container) {
             const roomName = locations.find(l => l.id === selectedRoomId)?.name || '';
             const roomContainer = document.createElement('div');
-            roomContainer.className = 'bg-gray-800 rounded-lg shadow p-6 border border-gray-700';
+            roomContainer.className = 'rounded-lg shadow p-6 border';
+            roomContainer.style.backgroundColor = 'var(--bg-secondary)';
+            roomContainer.style.borderColor = 'var(--border-color)';
             roomContainer.innerHTML = `<h2 class="text-xl font-bold mb-4">Editing: ${roomName}</h2>`;
             
             const productList = document.createElement('div');
@@ -377,7 +421,7 @@
                 productRow.className = 'flex items-center justify-between';
                 productRow.innerHTML = `
                     <label for="${selectedRoomId}-${product.id}" class="text-sm">${product.name}</label>
-                    <input type="number" id="${selectedRoomId}-${product.id}" data-product-id="${product.id}" data-location-id="${selectedRoomId}" value="${count}" class="count-input w-20 p-1 border border-gray-600 bg-gray-700 rounded-md text-right">
+                    <input type="number" id="${selectedRoomId}-${product.id}" data-product-id="${product.id}" data-location-id="${selectedRoomId}" value="${count}" class="count-input w-20 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);">
                 `;
                 productList.appendChild(productRow);
             });
@@ -443,13 +487,14 @@
             
             const toggleBtn = document.createElement('button');
             toggleBtn.id = 'toggle-view-mode-btn';
-            toggleBtn.className = 'bg-green-600 text-white px-4 py-2 rounded-md shadow hover:bg-green-700';
+            toggleBtn.className = 'text-white px-4 py-2 rounded-md shadow';
+            toggleBtn.style.backgroundColor = 'var(--accent-color)';
 
             if (viewPageMode === 'daily') {
                 toggleBtn.textContent = 'Show Weekly Summary';
                 const daySelectorContainer = document.createElement('div');
                 daySelectorContainer.className = 'flex items-center space-x-2';
-                daySelectorContainer.innerHTML = `<label for="day-selector" class="font-semibold">Day:</label><select id="day-selector" class="bg-gray-700 border-gray-600 p-2 border rounded-md"></select>`;
+                daySelectorContainer.innerHTML = `<label for="day-selector" class="font-semibold">Day:</label><select id="day-selector" class="p-2 border rounded-md" style="background-color: var(--bg-tertiary); border-color: var(--border-color);"></select>`;
                 controls.appendChild(daySelectorContainer);
                 renderDaySelector('day-selector');
                 renderDailyTotals(content);
@@ -469,10 +514,13 @@
             if (products.length === 0) return;
             const list = document.createElement('ul');
             list.className = 'space-y-2';
-            products.forEach(product => {
+            products.forEach((product, index) => {
                 const total = calculateProductTotal(product.id, currentDay);
                 const item = document.createElement('li');
-                item.className = 'flex justify-between items-center p-2 rounded-md even:bg-gray-700';
+                item.className = 'flex justify-between items-center p-2 rounded-md';
+                if(index % 2 !== 0) {
+                    item.style.backgroundColor = 'var(--bg-tertiary)';
+                }
                 item.innerHTML = `<span>${product.name}</span><span class="font-bold text-lg">${total.toFixed(2)}</span>`;
                 list.appendChild(item);
             });
@@ -491,7 +539,7 @@
                 const th = document.createElement('th');
                 const isCurrentDay = headerText.toLowerCase() === currentDay;
                 if (isCurrentDay) {
-                    th.className = 'bg-green-800';
+                    th.style.backgroundColor = 'var(--table-highlight)';
                 }
                 th.textContent = headerText.length > 3 ? headerText.slice(0, 3).toUpperCase() : headerText;
                 headerRow.appendChild(th);
@@ -507,7 +555,7 @@
                     const cell = row.insertCell();
                     cell.textContent = total.toFixed(2);
                     if (day === currentDay) {
-                        cell.className = 'bg-green-900';
+                        cell.style.backgroundColor = 'var(--table-highlight-faint)';
                     }
                 });
             });
@@ -521,9 +569,12 @@
             if (products.length === 0) {
                 list.innerHTML = `<li>No products yet.</li>`;
             } else {
-                products.forEach((product) => {
+                products.forEach((product, index) => {
                     const item = document.createElement('li');
-                    item.className = 'flex items-center p-2 rounded-md hover:bg-gray-700 gap-2';
+                    item.className = 'flex items-center p-2 rounded-md gap-2';
+                    if(index % 2 !== 0) {
+                        item.style.backgroundColor = 'var(--bg-tertiary)';
+                    }
                     item.draggable = true;
                     item.dataset.id = product.id;
                     item.innerHTML = `
@@ -533,7 +584,7 @@
                         <div class="flex-grow">${product.name}</div>
                         <div class="flex items-center gap-2">
                             <label for="os-${product.id}" class="text-sm font-medium">Opening:</label>
-                            <input type="number" id="os-${product.id}" data-id="${product.id}" value="${product.openingStock || 0}" class="opening-stock-input w-20 p-1 border border-gray-600 bg-gray-700 rounded-md text-right">
+                            <input type="number" id="os-${product.id}" data-id="${product.id}" value="${product.openingStock || 0}" class="opening-stock-input w-20 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);">
                         </div>
                         <button data-id="${product.id}" class="delete-product-btn text-red-500 hover:text-red-400 font-semibold text-sm">DELETE</button>
                     `;
@@ -558,6 +609,7 @@
                     }
                 }
                 if (target.id === 'logout-button') await signOut(auth);
+                if (target.id === 'theme-toggle') toggleTheme();
                 if (target.id === 'toggle-view-mode-btn') handleToggleViewMode();
                 if (target.classList.contains('delete-product-btn')) handleDeleteProduct(target);
                 if (target.id === 'add-product-btn') handleAddProduct();
@@ -715,7 +767,27 @@
                 button.classList.toggle('bg-green-600', isSelected);
                 button.classList.toggle('text-white', isSelected);
                 button.classList.toggle('bg-gray-700', !isSelected);
+                button.classList.toggle('text-gray-300', !isSelected);
             });
+        }
+        
+        function toggleTheme() {
+            const currentTheme = document.body.dataset.theme || 'dark';
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.body.dataset.theme = newTheme;
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcons(newTheme);
+        }
+
+        function updateThemeIcons(theme) {
+            document.getElementById('theme-icon-dark').classList.toggle('hidden', theme === 'light');
+            document.getElementById('theme-icon-light').classList.toggle('hidden', theme === 'dark');
+        }
+
+        function applyInitialTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.body.dataset.theme = savedTheme;
+            updateThemeIcons(savedTheme);
         }
 
         function debounce(func, delay) {
