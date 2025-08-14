@@ -62,9 +62,6 @@
             opacity: 0.5;
             background: #e0e7ff;
         }
-        .drag-over {
-            border-top: 2px solid #4f46e5;
-        }
         .handle {
             cursor: grab;
         }
@@ -112,9 +109,15 @@
                     <label for="day-selector" class="font-semibold">Select Day:</label>
                     <select id="day-selector" class="p-2 border rounded-md shadow-sm"></select>
                 </div>
+                <hr/>
                 <div class="flex items-center space-x-2">
-                    <label for="product-selector" class="font-semibold">Select Product:</label>
+                    <label for="product-selector" class="font-semibold w-28">By Product:</label>
                     <select id="product-selector" class="flex-grow p-2 border rounded-md shadow-sm"></select>
+                </div>
+                 <div class="text-center text-gray-500 font-semibold">OR</div>
+                <div class="flex items-center space-x-2">
+                    <label for="room-selector" class="font-semibold w-28">By Room:</label>
+                    <select id="room-selector" class="flex-grow p-2 border rounded-md shadow-sm"></select>
                 </div>
             </div>
             <div id="product-input-container"></div>
@@ -123,7 +126,7 @@
 
     <template id="view-view-template">
         <div id="view-view" class="bg-white rounded-lg shadow p-6">
-            <div id="view-controls" class="flex flex-col sm-flex-row justify-between items-start sm-items-center mb-4 gap-4"></div>
+            <div id="view-controls" class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4"></div>
             <div id="view-content-container"></div>
         </div>
     </template>
@@ -131,7 +134,7 @@
     <template id="configure-view-template">
         <div id="configure-view" class="bg-white rounded-lg shadow p-6">
             <h2 class="text-xl font-bold mb-4">Configure Products</h2>
-            <div class="flex flex-col sm-flex-row gap-2 mb-6">
+            <div class="flex flex-col sm:flex-row gap-2 mb-6">
                 <input type="text" id="new-product-name" class="flex-grow p-2 border rounded-md" placeholder="Enter new product name">
                 <button id="add-product-btn" class="bg-green-500 text-white px-4 py-2 rounded-md shadow hover:bg-green-600">Add Product</button>
             </div>
@@ -161,7 +164,9 @@
         let counts = {};
         let currentView = 'input';
         let viewPageMode = 'daily';
+        let inputMode = 'byProduct';
         let selectedProductId = null;
+        let selectedRoomId = null;
         let dataListenersAttached = false;
 
         const locations = [
@@ -204,7 +209,7 @@
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
-            setupEventListeners(); // Setup all listeners once.
+            setupEventListeners();
             
             onAuthStateChanged(auth, (user) => {
                 const loginOverlay = document.getElementById('login-overlay');
@@ -220,7 +225,7 @@
                     }
                 } else {
                     userId = null;
-                    dataListenersAttached = false; // Reset flag on logout
+                    dataListenersAttached = false;
                     loginOverlay.style.display = 'flex';
                     appContainer.style.display = 'none';
                 }
@@ -231,9 +236,13 @@
             onSnapshot(collection(db, "products"), (snapshot) => {
                 products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 products.sort((a, b) => (a.order || 0) - (b.order || 0));
-                if (!selectedProductId && products.length > 0) selectedProductId = products[0].id;
+                if (!selectedProductId && !selectedRoomId && products.length > 0) {
+                    selectedProductId = products[0].id;
+                    inputMode = 'byProduct';
+                }
                 render();
             }, (err) => console.error("Product listener error:", err));
+            
             onSnapshot(collection(db, "counts"), (snapshot) => {
                 counts = {};
                 snapshot.docs.forEach(doc => { counts[doc.id] = doc.data(); });
@@ -268,19 +277,37 @@
         function renderInputView() {
             renderDaySelector('day-selector');
             const productSelector = document.getElementById('product-selector');
+            const roomSelector = document.getElementById('room-selector');
             const container = document.getElementById('product-input-container');
-            if (!productSelector || !container) return;
+            if (!productSelector || !roomSelector || !container) return;
 
             productSelector.innerHTML = '<option value="">Select a product...</option>';
             products.forEach(p => productSelector.add(new Option(p.name, p.id)));
-            productSelector.value = selectedProductId;
+            
+            roomSelector.innerHTML = '<option value="">Select a room...</option>';
+            locations.forEach(l => roomSelector.add(new Option(l.name, l.id)));
+
             container.innerHTML = '';
-
-            if (!selectedProductId) {
-                container.innerHTML = `<p class="text-center p-4 bg-white rounded-lg shadow">Please select a product.</p>`;
-                return;
+            if (inputMode === 'byProduct') {
+                productSelector.value = selectedProductId;
+                roomSelector.value = "";
+                if (!selectedProductId) {
+                    container.innerHTML = `<p class="text-center p-4 bg-white rounded-lg shadow">Please select a product.</p>`;
+                } else {
+                    renderInputByProduct(container);
+                }
+            } else { // byRoom
+                roomSelector.value = selectedRoomId;
+                productSelector.value = "";
+                 if (!selectedRoomId) {
+                    container.innerHTML = `<p class="text-center p-4 bg-white rounded-lg shadow">Please select a room.</p>`;
+                } else {
+                    renderInputByRoom(container);
+                }
             }
+        }
 
+        function renderInputByProduct(container) {
             const selectedProduct = products.find(p => p.id === selectedProductId);
             const specialInputsForProduct = selectedProduct ? specialProductConfig[selectedProduct.name.toLowerCase()] : null;
 
@@ -304,10 +331,8 @@
                 const specialContainerWrapper = document.createElement('div');
                 specialContainerWrapper.className = 'mt-6';
                 specialContainerWrapper.innerHTML = `<h3 class="text-lg font-bold mb-4">Batch & Special Inputs</h3>`;
-                
                 const specialContainer = document.createElement('div');
                 specialContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
-
                 specialInputsForProduct.forEach(input => {
                     const count = counts[selectedProductId]?.[currentDay]?.specialInputs?.[input.id] || 0;
                     const specialEl = document.createElement('div');
@@ -322,6 +347,30 @@
                 specialContainerWrapper.appendChild(specialContainer);
                 container.appendChild(specialContainerWrapper);
             }
+        }
+
+        function renderInputByRoom(container) {
+            const roomName = locations.find(l => l.id === selectedRoomId)?.name || '';
+            const roomContainer = document.createElement('div');
+            roomContainer.className = 'bg-white rounded-lg shadow p-6';
+            roomContainer.innerHTML = `<h2 class="text-xl font-bold mb-4">Editing: ${roomName}</h2>`;
+            
+            const productList = document.createElement('div');
+            productList.className = 'space-y-3';
+
+            products.forEach(product => {
+                const count = counts[product.id]?.[currentDay]?.[selectedRoomId] || 0;
+                const productRow = document.createElement('div');
+                productRow.className = 'flex items-center justify-between';
+                productRow.innerHTML = `
+                    <label for="${selectedRoomId}-${product.id}" class="text-sm">${product.name}</label>
+                    <input type="number" id="${selectedRoomId}-${product.id}" data-product-id="${product.id}" data-location-id="${selectedRoomId}" value="${count}" class="count-input w-20 p-1 border rounded-md text-right">
+                `;
+                productList.appendChild(productRow);
+            });
+            
+            roomContainer.appendChild(productList);
+            container.appendChild(roomContainer);
         }
 
         function calculateProductTotal(productId, day) {
@@ -505,6 +554,7 @@
             document.body.addEventListener('change', (e) => {
                 if (e.target.id === 'day-selector') handleDayChange(e);
                 if (e.target.id === 'product-selector') handleProductSelect(e);
+                if (e.target.id === 'room-selector') handleRoomSelect(e);
             });
 
             document.body.addEventListener('keyup', (e) => {
@@ -580,7 +630,18 @@
         }
         
         function handleDayChange(e) { currentDay = e.target.value; render(); }
-        function handleProductSelect(e) { selectedProductId = e.target.value; render(); }
+        function handleProductSelect(e) { 
+            selectedProductId = e.target.value;
+            selectedRoomId = null;
+            inputMode = 'byProduct';
+            render(); 
+        }
+        function handleRoomSelect(e) {
+            selectedRoomId = e.target.value;
+            selectedProductId = null;
+            inputMode = 'byRoom';
+            render();
+        }
         function handleToggleViewMode() { viewPageMode = viewPageMode === 'daily' ? 'weekly' : 'daily'; render(); }
         function handleNavClick(target) { currentView = target.dataset.view; render(); }
 
