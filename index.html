@@ -58,10 +58,6 @@
             align-items: center;
             z-index: 1000;
         }
-        .reorder-btn:disabled {
-            opacity: 0.3;
-            cursor: not-allowed;
-        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -106,15 +102,9 @@
                     <label for="day-selector" class="font-semibold">Select Day:</label>
                     <select id="day-selector" class="p-2 border rounded-md shadow-sm"></select>
                 </div>
-                <hr/>
                 <div class="flex items-center space-x-2">
-                    <label for="product-selector" class="font-semibold w-28">By Product:</label>
+                    <label for="product-selector" class="font-semibold">Select Product:</label>
                     <select id="product-selector" class="flex-grow p-2 border rounded-md shadow-sm"></select>
-                </div>
-                 <div class="text-center text-gray-500 font-semibold">OR</div>
-                <div class="flex items-center space-x-2">
-                    <label for="room-selector" class="font-semibold w-28">By Room:</label>
-                    <select id="room-selector" class="flex-grow p-2 border rounded-md shadow-sm"></select>
                 </div>
             </div>
             <div id="product-input-container"></div>
@@ -155,15 +145,14 @@
              messagingSenderId: "348317364563",
              appId: "1:348317364563:web:2d0e8bec52d5323ca0b1a6"
         };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'bar-stock-counter';
 
         let db, auth, userId;
         let products = [];
         let counts = {};
         let currentView = 'input';
         let viewPageMode = 'daily';
-        let inputMode = 'byProduct';
         let selectedProductId = null;
-        let selectedRoomId = null;
         let dataListenersAttached = false;
 
         const locations = [
@@ -206,7 +195,7 @@
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
-            setupEventListeners();
+            setupEventListeners(); // Setup all listeners once.
             
             onAuthStateChanged(auth, (user) => {
                 const loginOverlay = document.getElementById('login-overlay');
@@ -222,7 +211,7 @@
                     }
                 } else {
                     userId = null;
-                    dataListenersAttached = false;
+                    dataListenersAttached = false; // Reset flag on logout
                     loginOverlay.style.display = 'flex';
                     appContainer.style.display = 'none';
                 }
@@ -230,19 +219,13 @@
         }
 
         function setupDataListeners() {
-            // **FIXED**: Simplified collection path
-            onSnapshot(collection(db, 'products'), (snapshot) => {
+            onSnapshot(collection(db, `artifacts/${appId}/public/data/products`), (snapshot) => {
                 products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                products.sort((a, b) => (a.order || 0) - (b.order || 0));
-                if (!selectedProductId && !selectedRoomId && products.length > 0) {
-                    selectedProductId = products[0].id;
-                    inputMode = 'byProduct';
-                }
+                products.sort((a, b) => a.name.localeCompare(b.name));
+                if (!selectedProductId && products.length > 0) selectedProductId = products[0].id;
                 render();
             }, (err) => console.error("Product listener error:", err));
-            
-            // **FIXED**: Simplified collection path
-            onSnapshot(collection(db, 'counts'), (snapshot) => {
+            onSnapshot(collection(db, `artifacts/${appId}/public/data/counts`), (snapshot) => {
                 counts = {};
                 snapshot.docs.forEach(doc => { counts[doc.id] = doc.data(); });
                 render();
@@ -263,40 +246,32 @@
             updateNavButtons();
         }
 
+        function renderDaySelector(containerId) {
+            const selector = document.getElementById(containerId);
+            if (!selector) return;
+            selector.innerHTML = '';
+            days.forEach(day => {
+                selector.add(new Option(day.charAt(0).toUpperCase() + day.slice(1), day));
+            });
+            selector.value = currentDay;
+        }
+
         function renderInputView() {
             renderDaySelector('day-selector');
             const productSelector = document.getElementById('product-selector');
-            const roomSelector = document.getElementById('room-selector');
             const container = document.getElementById('product-input-container');
-            if (!productSelector || !roomSelector || !container) return;
+            if (!productSelector || !container) return;
 
             productSelector.innerHTML = '<option value="">Select a product...</option>';
             products.forEach(p => productSelector.add(new Option(p.name, p.id)));
-            
-            roomSelector.innerHTML = '<option value="">Select a room...</option>';
-            locations.forEach(l => roomSelector.add(new Option(l.name, l.id)));
-
+            productSelector.value = selectedProductId;
             container.innerHTML = '';
-            if (inputMode === 'byProduct') {
-                productSelector.value = selectedProductId;
-                roomSelector.value = "";
-                if (!selectedProductId) {
-                    container.innerHTML = `<p class="text-center p-4 bg-white rounded-lg shadow">Please select a product.</p>`;
-                } else {
-                    renderInputByProduct(container);
-                }
-            } else { // byRoom
-                roomSelector.value = selectedRoomId;
-                productSelector.value = "";
-                 if (!selectedRoomId) {
-                    container.innerHTML = `<p class="text-center p-4 bg-white rounded-lg shadow">Please select a room.</p>`;
-                } else {
-                    renderInputByRoom(container);
-                }
-            }
-        }
 
-        function renderInputByProduct(container) {
+            if (!selectedProductId) {
+                container.innerHTML = `<p class="text-center p-4 bg-white rounded-lg shadow">Please select a product.</p>`;
+                return;
+            }
+
             const selectedProduct = products.find(p => p.id === selectedProductId);
             const specialInputsForProduct = selectedProduct ? specialProductConfig[selectedProduct.name.toLowerCase()] : null;
 
@@ -320,8 +295,10 @@
                 const specialContainerWrapper = document.createElement('div');
                 specialContainerWrapper.className = 'mt-6';
                 specialContainerWrapper.innerHTML = `<h3 class="text-lg font-bold mb-4">Batch & Special Inputs</h3>`;
+                
                 const specialContainer = document.createElement('div');
                 specialContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
+
                 specialInputsForProduct.forEach(input => {
                     const count = counts[selectedProductId]?.[currentDay]?.specialInputs?.[input.id] || 0;
                     const specialEl = document.createElement('div');
@@ -336,30 +313,6 @@
                 specialContainerWrapper.appendChild(specialContainer);
                 container.appendChild(specialContainerWrapper);
             }
-        }
-
-        function renderInputByRoom(container) {
-            const roomName = locations.find(l => l.id === selectedRoomId)?.name || '';
-            const roomContainer = document.createElement('div');
-            roomContainer.className = 'bg-white rounded-lg shadow p-6';
-            roomContainer.innerHTML = `<h2 class="text-xl font-bold mb-4">Editing: ${roomName}</h2>`;
-            
-            const productList = document.createElement('div');
-            productList.className = 'space-y-3';
-
-            products.forEach(product => {
-                const count = counts[product.id]?.[currentDay]?.[selectedRoomId] || 0;
-                const productRow = document.createElement('div');
-                productRow.className = 'flex items-center justify-between';
-                productRow.innerHTML = `
-                    <label for="${selectedRoomId}-${product.id}" class="text-sm">${product.name}</label>
-                    <input type="number" id="${selectedRoomId}-${product.id}" data-product-id="${product.id}" data-location-id="${selectedRoomId}" value="${count}" class="count-input w-20 p-1 border rounded-md text-right">
-                `;
-                productList.appendChild(productRow);
-            });
-            
-            roomContainer.appendChild(productList);
-            container.appendChild(roomContainer);
         }
 
         function calculateProductTotal(productId, day) {
@@ -467,7 +420,7 @@
                 const th = document.createElement('th');
                 const isCurrentDay = headerText.toLowerCase() === currentDay;
                 if (isCurrentDay) {
-                    th.className = 'bg-blue-200';
+                    th.className = 'bg-blue-200'; // Highlight class for header
                 }
                 th.textContent = headerText.length > 3 ? headerText.slice(0, 3).toUpperCase() : headerText;
                 headerRow.appendChild(th);
@@ -483,7 +436,7 @@
                     const cell = row.insertCell();
                     cell.textContent = total.toFixed(2);
                     if (day === currentDay) {
-                        cell.className = 'bg-blue-100';
+                        cell.className = 'bg-blue-100'; // Lighter highlight for data cells
                     }
                 });
             });
@@ -497,25 +450,16 @@
             if (products.length === 0) {
                 list.innerHTML = `<li>No products yet.</li>`;
             } else {
-                products.forEach((product, index) => {
+                products.forEach(product => {
                     const item = document.createElement('li');
-                    item.className = 'flex items-center p-2 rounded-md hover:bg-gray-100 gap-2';
+                    item.className = 'flex flex-col sm:flex-row justify-between items-start sm:items-center p-2 rounded-md hover:bg-gray-100 gap-2';
                     item.innerHTML = `
-                        <div class="flex-grow">${product.name}</div>
+                        <span class="flex-grow">${product.name}</span>
                         <div class="flex items-center gap-2">
                             <label for="os-${product.id}" class="text-sm font-medium">Opening:</label>
                             <input type="number" id="os-${product.id}" data-id="${product.id}" value="${product.openingStock || 0}" class="opening-stock-input w-20 p-1 border rounded-md text-right">
-                        </div>
-                        <div class="flex items-center gap-1">
-                             <button data-id="${product.id}" data-direction="up" class="reorder-btn p-1" ${index === 0 ? 'disabled' : ''}>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-up-square" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M15 2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2zM0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm8.5 9.5a.5.5 0 0 1-1 0V5.707L5.354 7.854a.5.5 0 1 1-.708-.708l3-3a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 5.707V11.5z"/></svg>
-                            </button>
-                            <button data-id="${product.id}" data-direction="down" class="reorder-btn p-1" ${index === products.length - 1 ? 'disabled' : ''}>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-down-square" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M15 2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2zM0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm8.5 2.5a.5.5 0 0 0-1 0v5.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V4.5z"/></svg>
-                            </button>
-                        </div>
-                        <button data-id="${product.id}" class="delete-product-btn text-red-500 hover:text-red-700 font-semibold text-sm">DELETE</button>
-                    `;
+                            <button data-id="${product.id}" class="delete-product-btn text-red-500 hover:text-red-700 font-semibold text-sm">DELETE</button>
+                        </div>`;
                     list.appendChild(item);
                 });
             }
@@ -523,9 +467,7 @@
 
         function setupEventListeners() {
             document.body.addEventListener('click', async (e) => {
-                const target = e.target.closest('button');
-                if (!target) return;
-                if (target.id === 'login-submit') {
+                if (e.target.id === 'login-submit') {
                     const emailInput = document.getElementById('email-input');
                     const passwordInput = document.getElementById('password-input');
                     const loginError = document.getElementById('login-error');
@@ -536,18 +478,16 @@
                         loginError.textContent = 'Login failed. Please check credentials.';
                     }
                 }
-                if (target.id === 'logout-button') await signOut(auth);
-                if (target.id === 'toggle-view-mode-btn') handleToggleViewMode();
-                if (target.classList.contains('delete-product-btn')) handleDeleteProduct(target);
-                if (target.id === 'add-product-btn') handleAddProduct();
-                if (target.classList.contains('nav-button')) handleNavClick(target);
-                if (target.classList.contains('reorder-btn')) handleReorderProduct(target);
+                if (e.target.id === 'logout-button') await signOut(auth);
+                if (e.target.id === 'toggle-view-mode-btn') handleToggleViewMode();
+                if (e.target.classList.contains('delete-product-btn')) handleDeleteProduct(e);
+                if (e.target.id === 'add-product-btn') handleAddProduct();
+                if (e.target.classList.contains('nav-button')) handleNavClick(e);
             });
 
             document.body.addEventListener('change', (e) => {
                 if (e.target.id === 'day-selector') handleDayChange(e);
                 if (e.target.id === 'product-selector') handleProductSelect(e);
-                if (e.target.id === 'room-selector') handleRoomSelect(e);
             });
 
             document.body.addEventListener('keyup', (e) => {
@@ -569,88 +509,45 @@
         }
         
         function handleDayChange(e) { currentDay = e.target.value; render(); }
-        function handleProductSelect(e) { 
-            selectedProductId = e.target.value;
-            selectedRoomId = null;
-            inputMode = 'byProduct';
-            render(); 
-        }
-        function handleRoomSelect(e) {
-            selectedRoomId = e.target.value;
-            selectedProductId = null;
-            inputMode = 'byRoom';
-            render();
-        }
+        function handleProductSelect(e) { selectedProductId = e.target.value; render(); }
         function handleToggleViewMode() { viewPageMode = viewPageMode === 'daily' ? 'weekly' : 'daily'; render(); }
-        function handleNavClick(target) { currentView = target.dataset.view; render(); }
+        function handleNavClick(e) { currentView = e.target.dataset.view; render(); }
 
         async function handleAddProduct() {
             const input = document.getElementById('new-product-name');
             const productName = input.value.trim();
             if (productName) {
-                const maxOrder = products.reduce((max, p) => Math.max(max, p.order || 0), 0);
-                await addDoc(collection(db, 'products'), { 
-                    name: productName, 
-                    openingStock: 0,
-                    order: products.length > 0 ? maxOrder + 1 : 1
-                });
+                await addDoc(collection(db, `artifacts/${appId}/public/data/products`), { name: productName, openingStock: 0 });
                 input.value = '';
             }
         }
 
-        async function handleDeleteProduct(target) {
-            const productId = target.dataset.id;
+        async function handleDeleteProduct(e) {
+            const productId = e.target.dataset.id;
             const batch = writeBatch(db);
-            batch.delete(doc(db, 'products', productId));
-            batch.delete(doc(db, 'counts', productId));
-            await batch.commit();
-        }
-
-        async function handleReorderProduct(target) {
-            const productId = target.dataset.id;
-            const direction = target.dataset.direction;
-            const currentIndex = products.findIndex(p => p.id === productId);
-
-            if ((direction === 'up' && currentIndex === 0) || (direction === 'down' && currentIndex === products.length - 1)) {
-                return;
-            }
-
-            const otherIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-            
-            const productA = products[currentIndex];
-            const productB = products[otherIndex];
-
-            const orderA = productA.order !== undefined ? productA.order : currentIndex + 1;
-            const orderB = productB.order !== undefined ? productB.order : otherIndex + 1;
-
-            const batch = writeBatch(db);
-            const docARef = doc(db, 'products', productA.id);
-            const docBRef = doc(db, 'products', productB.id);
-
-            batch.update(docARef, { order: orderB });
-            batch.update(docBRef, { order: orderA });
-
+            batch.delete(doc(db, `artifacts/${appId}/public/data/products`, productId));
+            batch.delete(doc(db, `artifacts/${appId}/public/data/counts`, productId));
             await batch.commit();
         }
 
         async function handleCountChange(e) {
             const { productId, locationId } = e.target.dataset;
             const value = e.target.value;
-            const countRef = doc(db, 'counts', productId);
+            const countRef = doc(db, `artifacts/${appId}/public/data/counts`, productId);
             await setDoc(countRef, { [currentDay]: { [locationId]: Number(value) || 0 } }, { merge: true });
         }
 
         async function handleSpecialInputChange(e) {
             const { productId, specialId } = e.target.dataset;
             const value = e.target.value;
-            const countRef = doc(db, 'counts', productId);
+            const countRef = doc(db, `artifacts/${appId}/public/data/counts`, productId);
             await setDoc(countRef, { [currentDay]: { specialInputs: { [specialId]: Number(value) || 0 } } }, { merge: true });
         }
 
         async function handleOpeningStockChange(e) {
             const productId = e.target.dataset.id;
             const value = e.target.value;
-            const productRef = doc(db, 'products', productId);
+            const productRef = doc(db, `artifacts/${appId}/public/data/products`, productId);
             await updateDoc(productRef, { openingStock: Number(value) || 0 });
         }
 
