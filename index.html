@@ -563,7 +563,9 @@
                     th.classList.add('font-bold');
                 }
 
- th.classList.add('text-center');
+if (days.includes(day)) {
+    th.classList.add('text-center');
+}
 
                 th.textContent = headerText.length > 3 ? headerText.slice(0, 3).toUpperCase() : headerText;
                 headerRow.appendChild(th);
