@@ -553,7 +553,7 @@
                 days.forEach(day => {
                     const total = calculateProductTotal(product.id, day);
                     const cell = row.insertCell();
-                    cell.textContent = total.toFixed(2);
+                    cell.textContent = total.toFixed(1);
                     if (day === currentDay) {
                         cell.style.backgroundColor = 'var(--table-highlight-faint)';
                     }
