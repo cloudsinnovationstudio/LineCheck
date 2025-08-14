@@ -716,7 +716,13 @@
             render();
         }
         function handleToggleViewMode() { viewPageMode = viewPageMode === 'daily' ? 'weekly' : 'daily'; render(); }
-        function handleNavClick(target) { currentView = target.dataset.view; render(); }
+        function handleNavClick(target) { 
+            if (target.dataset.view === 'input') {
+                currentDay = days[(new Date().getDay() + 6) % 7];
+            }
+            currentView = target.dataset.view; 
+            render(); 
+        }
 
         async function handleAddProduct() {
             const input = document.getElementById('new-product-name');
