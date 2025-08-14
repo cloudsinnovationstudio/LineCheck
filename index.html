@@ -111,13 +111,14 @@
                 </div>
                 <hr/>
                 <div class="flex items-center space-x-2">
-                    <label for="product-selector" class="font-semibold w-28">By Product:</label>
-                    <select id="product-selector" class="flex-grow p-2 border rounded-md shadow-sm"></select>
+                     <label class="font-semibold w-28">Input Mode:</label>
+                    <div class="flex rounded-md shadow-sm">
+                        <button data-mode="byProduct" class="input-mode-btn px-4 py-2 rounded-l-md border">By Product</button>
+                        <button data-mode="byRoom" class="input-mode-btn px-4 py-2 rounded-r-md border -ml-px">By Room</button>
+                    </div>
                 </div>
-                 <div class="text-center text-gray-500 font-semibold">OR</div>
-                <div class="flex items-center space-x-2">
-                    <label for="room-selector" class="font-semibold w-28">By Room:</label>
-                    <select id="room-selector" class="flex-grow p-2 border rounded-md shadow-sm"></select>
+                <div id="selector-container" class="flex items-center space-x-2">
+                    <!-- Dropdown will be inserted here -->
                 </div>
             </div>
             <div id="product-input-container"></div>
@@ -276,29 +277,39 @@
 
         function renderInputView() {
             renderDaySelector('day-selector');
-            const productSelector = document.getElementById('product-selector');
-            const roomSelector = document.getElementById('room-selector');
+            const selectorContainer = document.getElementById('selector-container');
             const container = document.getElementById('product-input-container');
-            if (!productSelector || !roomSelector || !container) return;
-
-            productSelector.innerHTML = '<option value="">Select a product...</option>';
-            products.forEach(p => productSelector.add(new Option(p.name, p.id)));
+            if (!selectorContainer || !container) return;
             
-            roomSelector.innerHTML = '<option value="">Select a room...</option>';
-            locations.forEach(l => roomSelector.add(new Option(l.name, l.id)));
+            document.querySelectorAll('.input-mode-btn').forEach(btn => {
+                btn.classList.toggle('bg-blue-500', btn.dataset.mode === inputMode);
+                btn.classList.toggle('text-white', btn.dataset.mode === inputMode);
+            });
 
+            selectorContainer.innerHTML = '';
             container.innerHTML = '';
+
             if (inputMode === 'byProduct') {
+                selectorContainer.innerHTML = `
+                    <label for="product-selector" class="font-semibold w-28">By Product:</label>
+                    <select id="product-selector" class="flex-grow p-2 border rounded-md shadow-sm"></select>`;
+                const productSelector = document.getElementById('product-selector');
+                productSelector.innerHTML = '<option value="">Select a product...</option>';
+                products.forEach(p => productSelector.add(new Option(p.name, p.id)));
                 productSelector.value = selectedProductId;
-                roomSelector.value = "";
                 if (!selectedProductId) {
                     container.innerHTML = `<p class="text-center p-4 bg-white rounded-lg shadow">Please select a product.</p>`;
                 } else {
                     renderInputByProduct(container);
                 }
             } else { // byRoom
+                selectorContainer.innerHTML = `
+                    <label for="room-selector" class="font-semibold w-28">By Room:</label>
+                    <select id="room-selector" class="flex-grow p-2 border rounded-md shadow-sm"></select>`;
+                const roomSelector = document.getElementById('room-selector');
+                roomSelector.innerHTML = '<option value="">Select a room...</option>';
+                locations.forEach(l => roomSelector.add(new Option(l.name, l.id)));
                 roomSelector.value = selectedRoomId;
-                productSelector.value = "";
                  if (!selectedRoomId) {
                     container.innerHTML = `<p class="text-center p-4 bg-white rounded-lg shadow">Please select a room.</p>`;
                 } else {
@@ -549,6 +560,7 @@
                 if (target.classList.contains('delete-product-btn')) handleDeleteProduct(target);
                 if (target.id === 'add-product-btn') handleAddProduct();
                 if (target.classList.contains('nav-button')) handleNavClick(target);
+                if (target.classList.contains('input-mode-btn')) handleInputModeChange(target);
             });
 
             document.body.addEventListener('change', (e) => {
@@ -632,14 +644,21 @@
         function handleDayChange(e) { currentDay = e.target.value; render(); }
         function handleProductSelect(e) { 
             selectedProductId = e.target.value;
-            selectedRoomId = null;
-            inputMode = 'byProduct';
             render(); 
         }
         function handleRoomSelect(e) {
             selectedRoomId = e.target.value;
-            selectedProductId = null;
-            inputMode = 'byRoom';
+            render();
+        }
+        function handleInputModeChange(target) {
+            inputMode = target.dataset.mode;
+            if (inputMode === 'byProduct') {
+                selectedRoomId = null;
+                if (!selectedProductId && products.length > 0) selectedProductId = products[0].id;
+            } else { // byRoom
+                selectedProductId = null;
+                if (!selectedRoomId && locations.length > 0) selectedRoomId = locations[0].id;
+            }
             render();
         }
         function handleToggleViewMode() { viewPageMode = viewPageMode === 'daily' ? 'weekly' : 'daily'; render(); }
