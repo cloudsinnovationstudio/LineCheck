@@ -563,10 +563,6 @@
                     th.classList.add('font-bold');
                 }
 
-if (days.includes(day)) {
-    th.classList.add('text-center');
-}
-
                 th.textContent = headerText.length > 3 ? headerText.slice(0, 3).toUpperCase() : headerText;
                 headerRow.appendChild(th);
             });
@@ -611,10 +607,13 @@ if (days.includes(day)) {
                         </div>
                         <div class="flex-grow">${product.name}</div>
                         <div class="flex items-center gap-2">
-                            <label for="os-${product.id}" class="text-sm font-medium">Opening:</label>
-                            <input type="number" id="os-${product.id}" data-id="${product.id}" value="${product.openingStock || 0}" class="opening-stock-input w-20 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);">
+                            <input type="number" id="os-${product.id}" data-id="${product.id}" value="${product.openingStock || 0}" class="opening-stock-input w-20 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);" placeholder="Opening">
+                            <button data-id="${product.id}" class="delete-product-btn text-red-500 hover:text-red-400 p-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-x-circle-fill" viewBox="0 0 16 16">
+                                    <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM5.354 4.646a.5.5 0 1 0-.708.708L7.293 8l-2.647 2.646a.5.5 0 0 0 .708.708L8 8.707l2.646 2.647a.5.5 0 0 0 .708-.708L8.707 8l2.647-2.646a.5.5 0 0 0-.708-.708L8 7.293 5.354 4.646z"/>
+                                </svg>
+                            </button>
                         </div>
-                        <button data-id="${product.id}" class="delete-product-btn text-red-500 hover:text-red-400 font-semibold text-sm">DELETE</button>
                     `;
                     list.appendChild(item);
                 });
@@ -835,4 +834,4 @@ if (days.includes(day)) {
         main();
     </script>
 </body>
-</html>
+</ht
