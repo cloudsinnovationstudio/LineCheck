@@ -202,12 +202,13 @@
 
             <div class="mb-6">
                 <h3 class="font-semibold mb-2">Import from screenshot</h3>
-                <p class="text-sm mb-3" style="color: var(--text-secondary);">Snip your product list, then paste (Ctrl+V / ⌘V) or drop/upload the image here.</p>
-                <div id="ocr-dropzone" class="ocr-dropzone" tabindex="0" role="button" aria-label="Paste or upload product list screenshot">
-                    <input type="file" id="ocr-file-input" accept="image/*" class="hidden">
+                <p class="text-sm mb-3" style="color: var(--text-secondary);">Snip your product list, then upload the image or paste it with Ctrl+V / ⌘V.</p>
+                <div id="ocr-dropzone" class="ocr-dropzone" tabindex="0" role="region" aria-label="Import product list from screenshot">
+                    <input type="file" id="ocr-file-input" accept="image/*" class="hidden" aria-hidden="true">
                     <div id="ocr-dropzone-content">
-                        <p class="font-medium" style="color: var(--text-primary);">Paste, drop, or click to upload</p>
-                        <p class="text-sm mt-1" style="color: var(--text-secondary);">Works best with a clear list of product names</p>
+                        <p class="font-medium mb-3" style="color: var(--text-primary);">Add a screenshot of your product list</p>
+                        <button type="button" id="ocr-upload-btn" class="text-white px-4 py-2 rounded-md shadow" style="background-color: var(--accent-color);">Upload screenshot</button>
+                        <p class="text-sm mt-3" style="color: var(--text-secondary);">Or paste with <kbd style="padding: 0.1rem 0.35rem; border: 1px solid var(--border-color); border-radius: 0.25rem; background-color: var(--bg-secondary);">Ctrl</kbd>+<kbd style="padding: 0.1rem 0.35rem; border: 1px solid var(--border-color); border-radius: 0.25rem; background-color: var(--bg-secondary);">V</kbd> / <kbd style="padding: 0.1rem 0.35rem; border: 1px solid var(--border-color); border-radius: 0.25rem; background-color: var(--bg-secondary);">⌘</kbd>+<kbd style="padding: 0.1rem 0.35rem; border: 1px solid var(--border-color); border-radius: 0.25rem; background-color: var(--bg-secondary);">V</kbd>, or drop an image here</p>
                     </div>
                     <div id="ocr-status" class="hidden mt-3">
                         <div class="loader" style="margin: 0 auto 0.5rem;"></div>
@@ -921,6 +922,9 @@
                 if (target.id === 'toggle-view-mode-btn') handleToggleViewMode();
                 if (target.classList.contains('delete-product-btn')) handleDeleteProduct(target);
                 if (target.id === 'add-product-btn') handleAddProduct();
+                if (target.id === 'ocr-upload-btn') {
+                    document.getElementById('ocr-file-input')?.click();
+                }
                 if (target.id === 'ocr-confirm-btn') handleOcrConfirm();
                 if (target.id === 'ocr-cancel-btn') cancelOcrPreview();
                 if (target.classList.contains('nav-button')) handleNavClick(target);
