@@ -270,38 +270,13 @@
         let ocrBusy = false;
 
         const locations = [
-            { id: 'islandBar', name: 'Island Bar' },
-            { id: 'mainBar', name: 'Main Bar' },
-            { id: 'coldRoom', name: 'Cold Room' },
-            { id: 'kegRoom', name: 'Keg Room' }
+            { id: 'arbourBar', name: 'Arbour Bar' },
+            { id: 'arbourCellar', name: 'Arbour Cellar' },
+            { id: 'arbourSpiritCupboard', name: 'Arbour Spirit Cupboard' },
+            { id: 'dryStore', name: 'Dry Store' },
+            { id: 'arribaBar', name: 'Arriba Bar' },
+            { id: 'arribaCellar', name: 'Arriba Cellar' }
         ];
-        const specialProductConfig = {
-            "ron santiago 8yo": [
-                { id: 'pergolaKilner', name: 'Pergola Punch Batch Kilner' },
-                { id: 'pergolaBtl', name: 'Pergola Punch Batch BTL' },
-                { id: 'strawberrySlushie', name: 'Strawberry Daquiri Slushie' },
-                { id: 'pinaColadaSlushie', name: 'Pina Colada Slushie' }
-            ],
-            "absolut raspberri": [
-                { id: 'raspberryDaisyKilner', name: 'Raspberry Daisy Kilner' },
-                { id: 'raspberryDaisyBtl', name: 'Raspberry Daisy BTL' }
-            ],
-            "blend passionfruit": [
-                { id: 'pergolaKilner', name: 'Pergola Punch Batch Kilner' },
-                { id: 'pergolaBtl', name: 'Pergola Punch Batch BTL' }
-            ],
-            "creme de mure": [
-                { id: 'raspberryDaisyKilner', name: 'Raspberry Daisy Kilner' },
-                { id: 'raspberryDaisyBtl', name: 'Raspberry Daisy BTL' }
-            ],
-            "funkin passionfruit": [
-                { id: 'pureeBtl', name: 'Puree BTL' },
-                { id: 'pergolaPunchJuiceBatch', name: 'Pergola Punch Juice Batch' }
-            ],
-            "pineapple juice": [
-                { id: 'pergolaPunchJuiceBatch', name: 'Pergola Punch Juice Batch' }
-            ]
-        };
         const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
         let currentDay = days[(new Date().getDay() + 6) % 7];
 
@@ -446,9 +421,6 @@
         }
 
         function renderInputByProduct(container) {
-            const selectedProduct = products.find(p => p.id === selectedProductId);
-            const specialInputsForProduct = selectedProduct ? specialProductConfig[selectedProduct.name.toLowerCase()] : null;
-
             const standardContainer = document.createElement('div');
             standardContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
             locations.forEach(location => {
@@ -466,29 +438,6 @@
                 standardContainer.appendChild(locationEl);
             });
             container.appendChild(standardContainer);
-            
-            if (specialInputsForProduct) {
-                const specialContainerWrapper = document.createElement('div');
-                specialContainerWrapper.className = 'mt-6';
-                specialContainerWrapper.innerHTML = `<h3 class="text-lg font-bold mb-4">Batch & Special Inputs</h3>`;
-                const specialContainer = document.createElement('div');
-                specialContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
-                specialInputsForProduct.forEach(input => {
-                    const count = counts[selectedProductId]?.[currentDay]?.specialInputs?.[input.id] || 0;
-                    const specialEl = document.createElement('div');
-                    specialEl.className = 'rounded-lg shadow p-6 border';
-                    specialEl.style.backgroundColor = 'var(--bg-secondary)';
-                    specialEl.style.borderColor = 'var(--border-color)';
-                    specialEl.innerHTML = `
-                        <div class="flex items-center justify-between">
-                            <label for="${input.id}-${selectedProductId}" class="text-sm">${input.name}</label>
-                            <input type="number" id="${input.id}-${selectedProductId}" data-product-id="${selectedProductId}" data-special-id="${input.id}" value="${count}" class="special-input w-20 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);">
-                        </div>`;
-                    specialContainer.appendChild(specialEl);
-                });
-                specialContainerWrapper.appendChild(specialContainer);
-                container.appendChild(specialContainerWrapper);
-            }
         }
 
         function renderInputByRoom(container) {
@@ -518,51 +467,8 @@
         }
 
         function calculateProductTotal(productId, day) {
-            const product = products.find(p => p.id === productId);
             const dayCounts = counts[productId]?.[day] || {};
-            
-            let total = locations.reduce((sum, loc) => sum + (Number(dayCounts[loc.id]) || 0), 0);
-            
-            if (product && dayCounts.specialInputs) {
-                const specials = dayCounts.specialInputs;
-                const productNameLower = product.name.toLowerCase();
-
-                if (productNameLower === "ron santiago 8yo") {
-                    const kilnerInput = Number(specials.pergolaKilner) || 0;
-                    const btlInput = Number(specials.pergolaBtl) || 0;
-                    const strawberryInput = Number(specials.strawberrySlushie) || 0;
-                    const pinaInput = Number(specials.pinaColadaSlushie) || 0;
-
-                    total += (kilnerInput * 8400 * (7 / 12)) / 700;
-                    total += (btlInput * 700 * (7 / 12)) / 700;
-                    total += (strawberryInput * 10000 * (350 / 2350)) / 700;
-                    total += (pinaInput * 10000 * (350 / 2350)) / 700;
-                } else if (productNameLower === "absolut raspberri" || productNameLower === "creme de mure") {
-                    const kilnerInput = Number(specials.raspberryDaisyKilner) || 0;
-                    const btlInput = Number(specials.raspberryDaisyBtl) || 0;
-                    
-                    total += (kilnerInput * 8400 * (7 / 12)) / 700;
-                    total += (btlInput * 700 * (7 / 12)) / 700;
-                } else if (productNameLower === "blend passionfruit") {
-                    const kilnerInput = Number(specials.pergolaKilner) || 0;
-                    const btlInput = Number(specials.pergolaBtl) || 0;
-
-                    total += (kilnerInput * 8400 * (5 / 12)) / 700;
-                    total += (btlInput * 700 * (5 / 12)) / 700;
-                } else if (productNameLower === "funkin passionfruit") {
-                    const pureeInput = Number(specials.pureeBtl) || 0;
-                    const juiceBatchInput = Number(specials.pergolaPunchJuiceBatch) || 0;
-                    
-                    total += pureeInput * (7/10);
-                    total += juiceBatchInput * 10 * (25/85);
-                } else if (productNameLower === "pineapple juice") {
-                    const juiceBatchInput = Number(specials.pergolaPunchJuiceBatch) || 0;
-                    
-                    total += juiceBatchInput * 10 * (35/85);
-                }
-            }
-            
-            return total;
+            return locations.reduce((sum, loc) => sum + (Number(dayCounts[loc.id]) || 0), 0);
         }
 
         function renderViewView() {
@@ -1063,7 +969,6 @@
 
             document.body.addEventListener('input', debounce((e) => {
                 if (e.target.classList.contains('count-input')) handleCountChange(e);
-                if (e.target.classList.contains('special-input')) handleSpecialInputChange(e);
                 if (e.target.classList.contains('opening-stock-input')) handleOpeningStockChange(e);
             }, 1500));
             
@@ -1186,13 +1091,6 @@
             const value = e.target.value;
             const countRef = doc(db, 'counts', productId);
             await setDoc(countRef, { [currentDay]: { [locationId]: Number(value) || 0 } }, { merge: true });
-        }
-
-        async function handleSpecialInputChange(e) {
-            const { productId, specialId } = e.target.dataset;
-            const value = e.target.value;
-            const countRef = doc(db, 'counts', productId);
-            await setDoc(countRef, { [currentDay]: { specialInputs: { [specialId]: Number(value) || 0 } } }, { merge: true });
         }
 
         async function handleOpeningStockChange(e) {
