@@ -95,6 +95,32 @@
         .handle {
             cursor: grab;
         }
+        .ocr-dropzone {
+            border: 2px dashed var(--border-color);
+            border-radius: 0.5rem;
+            padding: 1.25rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.15s ease, background-color 0.15s ease;
+            background-color: var(--bg-tertiary);
+        }
+        .ocr-dropzone:hover,
+        .ocr-dropzone.drag-over {
+            border-color: var(--accent-color);
+            background-color: color-mix(in srgb, var(--accent-color) 12%, var(--bg-tertiary));
+        }
+        .ocr-dropzone.processing {
+            pointer-events: none;
+            opacity: 0.75;
+        }
+        .ocr-preview-item input[type="text"] {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.375rem;
+            color: var(--text-primary);
+            padding: 0.35rem 0.5rem;
+            width: 100%;
+        }
     </style>
 </head>
 <body>
@@ -173,6 +199,38 @@
     <template id="configure-view-template">
         <div id="configure-view" class="rounded-lg shadow p-6 border" style="background-color: var(--bg-secondary); border-color: var(--border-color);">
             <h2 class="text-xl font-bold mb-4">Configure Products</h2>
+
+            <div class="mb-6">
+                <h3 class="font-semibold mb-2">Import from screenshot</h3>
+                <p class="text-sm mb-3" style="color: var(--text-secondary);">Snip your product list, then paste (Ctrl+V / ⌘V) or drop/upload the image here.</p>
+                <div id="ocr-dropzone" class="ocr-dropzone" tabindex="0" role="button" aria-label="Paste or upload product list screenshot">
+                    <input type="file" id="ocr-file-input" accept="image/*" class="hidden">
+                    <div id="ocr-dropzone-content">
+                        <p class="font-medium" style="color: var(--text-primary);">Paste, drop, or click to upload</p>
+                        <p class="text-sm mt-1" style="color: var(--text-secondary);">Works best with a clear list of product names</p>
+                    </div>
+                    <div id="ocr-status" class="hidden mt-3">
+                        <div class="loader" style="margin: 0 auto 0.5rem;"></div>
+                        <p id="ocr-status-text" class="text-sm" style="color: var(--text-secondary);">Reading products…</p>
+                    </div>
+                </div>
+                <p id="ocr-error" class="text-red-400 mt-2 text-sm hidden"></p>
+                <div id="ocr-preview" class="hidden mt-4 p-4 rounded-md border" style="border-color: var(--border-color); background-color: var(--bg-tertiary);">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                        <h4 class="font-semibold">Detected products</h4>
+                        <label class="text-sm flex items-center gap-2 cursor-pointer" style="color: var(--text-secondary);">
+                            <input type="checkbox" id="ocr-replace-existing" class="rounded">
+                            Replace current product list
+                        </label>
+                    </div>
+                    <ul id="ocr-preview-list" class="space-y-2 mb-4"></ul>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <button id="ocr-confirm-btn" class="text-white px-4 py-2 rounded-md shadow" style="background-color: var(--accent-color);">Add products</button>
+                        <button id="ocr-cancel-btn" class="px-4 py-2 rounded-md shadow border" style="border-color: var(--border-color); background-color: var(--bg-secondary); color: var(--text-primary);">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="flex flex-col sm:flex-row gap-2 mb-6">
                 <input type="text" id="new-product-name" class="flex-grow p-2 border rounded-md" style="background-color: var(--bg-tertiary); border-color: var(--border-color);" placeholder="Enter new product name">
                 <button id="add-product-btn" class="text-white px-4 py-2 rounded-md shadow" style="background-color: var(--accent-color);">Add Product</button>
@@ -207,6 +265,8 @@
         let selectedProductId = null;
         let selectedRoomId = null;
         let dataListenersAttached = false;
+        let ocrWorkerPromise = null;
+        let ocrBusy = false;
 
         const locations = [
             { id: 'islandBar', name: 'Island Bar' },
@@ -620,6 +680,227 @@
             }
         }
 
+        async function getOcrWorker() {
+            if (!ocrWorkerPromise) {
+                ocrWorkerPromise = (async () => {
+                    const { createWorker } = await import('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.esm.min.js');
+                    const worker = await createWorker('eng');
+                    await worker.setParameters({
+                        tessedit_pageseg_mode: '6',
+                        preserve_interword_spaces: '1',
+                    });
+                    return worker;
+                })().catch((err) => {
+                    ocrWorkerPromise = null;
+                    throw err;
+                });
+            }
+            return ocrWorkerPromise;
+        }
+
+        function toTitleCase(name) {
+            return name
+                .toLowerCase()
+                .replace(/\b([a-z])/g, (m) => m.toUpperCase())
+                .replace(/\b(Dr|Btl|Yo)\b/g, (m) => m.toUpperCase());
+        }
+
+        function parseProductNamesFromOcr(text) {
+            const seen = new Set();
+            return text
+                .split(/\r?\n/)
+                .map((line) => line
+                    .replace(/[|]/]/g, 'I')
+                    .replace(/[^\w\s&'./()-]/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim())
+                .filter((line) => line.length >= 2 && /[A-Za-z]/.test(line))
+                .filter((line) => !/^(name|product|item|qty|quantity|stock|total)$/i.test(line))
+                .map((line) => toTitleCase(line))
+                .filter((line) => {
+                    const key = line.toLowerCase();
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
+        }
+
+        function setOcrUiState({ processing = false, error = '', showPreview = null } = {}) {
+            const dropzone = document.getElementById('ocr-dropzone');
+            const content = document.getElementById('ocr-dropzone-content');
+            const status = document.getElementById('ocr-status');
+            const statusText = document.getElementById('ocr-status-text');
+            const errorEl = document.getElementById('ocr-error');
+            const preview = document.getElementById('ocr-preview');
+            if (!dropzone) return;
+
+            dropzone.classList.toggle('processing', processing);
+            if (content) content.classList.toggle('hidden', processing);
+            if (status) status.classList.toggle('hidden', !processing);
+            if (statusText && processing) statusText.textContent = 'Reading products…';
+
+            if (errorEl) {
+                errorEl.textContent = error || '';
+                errorEl.classList.toggle('hidden', !error);
+            }
+            if (preview && showPreview !== null) {
+                preview.classList.toggle('hidden', !showPreview);
+            }
+        }
+
+        function renderOcrPreview(names) {
+            const preview = document.getElementById('ocr-preview');
+            const list = document.getElementById('ocr-preview-list');
+            if (!preview || !list) return;
+
+            list.innerHTML = '';
+            if (names.length === 0) {
+                setOcrUiState({ error: 'No product names found in that image. Try a clearer snip.', showPreview: false });
+                return;
+            }
+
+            names.forEach((name, index) => {
+                const item = document.createElement('li');
+                item.className = 'ocr-preview-item flex items-center gap-2';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'ocr-include-checkbox rounded';
+                checkbox.dataset.index = String(index);
+                checkbox.checked = true;
+
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.className = 'ocr-name-input flex-grow';
+                nameInput.dataset.index = String(index);
+                nameInput.value = name;
+
+                item.appendChild(checkbox);
+                item.appendChild(nameInput);
+                list.appendChild(item);
+            });
+
+            const replaceCheckbox = document.getElementById('ocr-replace-existing');
+            if (replaceCheckbox) replaceCheckbox.checked = products.length > 0;
+            setOcrUiState({ error: '', showPreview: true });
+        }
+
+        async function processOcrImage(imageSource) {
+            if (ocrBusy || currentView !== 'configure') return;
+            ocrBusy = true;
+            setOcrUiState({ processing: true, error: '', showPreview: false });
+
+            try {
+                const worker = await getOcrWorker();
+                const { data: { text } } = await worker.recognize(imageSource);
+                const names = parseProductNamesFromOcr(text || '');
+                renderOcrPreview(names);
+            } catch (err) {
+                console.error('OCR failed:', err);
+                setOcrUiState({ error: 'Could not read that image. Please try again.', showPreview: false });
+            } finally {
+                ocrBusy = false;
+                setOcrUiState({ processing: false });
+            }
+        }
+
+        function getImageFromClipboardEvent(e) {
+            const items = e.clipboardData?.items;
+            if (!items) return null;
+            for (const item of items) {
+                if (item.type.startsWith('image/')) {
+                    return item.getAsFile();
+                }
+            }
+            return null;
+        }
+
+        function cancelOcrPreview() {
+            setOcrUiState({ error: '', showPreview: false });
+            const list = document.getElementById('ocr-preview-list');
+            if (list) list.innerHTML = '';
+            const fileInput = document.getElementById('ocr-file-input');
+            if (fileInput) fileInput.value = '';
+        }
+
+        function getSelectedOcrNames() {
+            const list = document.getElementById('ocr-preview-list');
+            if (!list) return [];
+            const names = [];
+            const seen = new Set();
+            list.querySelectorAll('.ocr-preview-item').forEach((item) => {
+                const checked = item.querySelector('.ocr-include-checkbox')?.checked;
+                const raw = item.querySelector('.ocr-name-input')?.value?.trim();
+                if (!checked || !raw) return;
+                const key = raw.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                names.push(raw);
+            });
+            return names;
+        }
+
+        async function handleOcrConfirm() {
+            const names = getSelectedOcrNames();
+            if (names.length === 0) {
+                setOcrUiState({ error: 'Select at least one product to add.' });
+                return;
+            }
+
+            const replaceExisting = document.getElementById('ocr-replace-existing')?.checked;
+            const confirmBtn = document.getElementById('ocr-confirm-btn');
+            if (confirmBtn) {
+                confirmBtn.disabled = true;
+                confirmBtn.textContent = 'Adding…';
+            }
+
+            try {
+                if (replaceExisting && products.length > 0) {
+                    const deleteBatch = writeBatch(db);
+                    products.forEach((product) => {
+                        deleteBatch.delete(doc(db, 'products', product.id));
+                        deleteBatch.delete(doc(db, 'counts', product.id));
+                    });
+                    await deleteBatch.commit();
+                }
+
+                const existingNames = new Set(
+                    (replaceExisting ? [] : products).map((p) => p.name.toLowerCase())
+                );
+                const namesToAdd = names.filter((name) => !existingNames.has(name.toLowerCase()));
+
+                if (namesToAdd.length === 0) {
+                    setOcrUiState({ error: 'All selected products already exist.', showPreview: true });
+                    return;
+                }
+
+                const maxOrder = replaceExisting
+                    ? 0
+                    : products.reduce((max, p) => Math.max(max, p.order || 0), 0);
+
+                // Firestore batches are capped at 500 ops; product lists are typically small.
+                const addBatch = writeBatch(db);
+                namesToAdd.forEach((name, index) => {
+                    const ref = doc(collection(db, 'products'));
+                    addBatch.set(ref, {
+                        name,
+                        openingStock: 0,
+                        order: maxOrder + index + 1,
+                    });
+                });
+                await addBatch.commit();
+                cancelOcrPreview();
+            } catch (err) {
+                console.error('Failed to add OCR products:', err);
+                setOcrUiState({ error: 'Failed to save products. Please try again.', showPreview: true });
+            } finally {
+                if (confirmBtn) {
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Add products';
+                }
+            }
+        }
+
         function setupEventListeners() {
             document.body.addEventListener('click', async (e) => {
                 const target = e.target.closest('button');
@@ -640,14 +921,58 @@
                 if (target.id === 'toggle-view-mode-btn') handleToggleViewMode();
                 if (target.classList.contains('delete-product-btn')) handleDeleteProduct(target);
                 if (target.id === 'add-product-btn') handleAddProduct();
+                if (target.id === 'ocr-confirm-btn') handleOcrConfirm();
+                if (target.id === 'ocr-cancel-btn') cancelOcrPreview();
                 if (target.classList.contains('nav-button')) handleNavClick(target);
                 if (target.classList.contains('input-mode-btn')) handleInputModeChange(target);
+            });
+
+            document.body.addEventListener('click', (e) => {
+                const dropzone = e.target.closest('#ocr-dropzone');
+                if (!dropzone || e.target.closest('#ocr-preview') || e.target.closest('button') || e.target.closest('input')) return;
+                document.getElementById('ocr-file-input')?.click();
             });
 
             document.body.addEventListener('change', (e) => {
                 if (e.target.id === 'day-selector') handleDayChange(e);
                 if (e.target.id === 'product-selector') handleProductSelect(e);
                 if (e.target.id === 'room-selector') handleRoomSelect(e);
+                if (e.target.id === 'ocr-file-input' && e.target.files?.[0]) {
+                    processOcrImage(e.target.files[0]);
+                }
+            });
+
+            document.addEventListener('paste', (e) => {
+                if (currentView !== 'configure') return;
+                const imageFile = getImageFromClipboardEvent(e);
+                if (!imageFile) return;
+                e.preventDefault();
+                processOcrImage(imageFile);
+            });
+
+            document.body.addEventListener('dragover', (e) => {
+                const dropzone = e.target.closest?.('#ocr-dropzone');
+                if (!dropzone) return;
+                e.preventDefault();
+                dropzone.classList.add('drag-over');
+            });
+
+            document.body.addEventListener('dragleave', (e) => {
+                const dropzone = e.target.closest?.('#ocr-dropzone');
+                if (!dropzone) return;
+                if (e.relatedTarget && dropzone.contains(e.relatedTarget)) return;
+                dropzone.classList.remove('drag-over');
+            });
+
+            document.body.addEventListener('drop', (e) => {
+                const dropzone = e.target.closest?.('#ocr-dropzone');
+                if (!dropzone) return;
+                dropzone.classList.remove('drag-over');
+                const file = [...(e.dataTransfer?.files || [])].find((f) => f.type.startsWith('image/'));
+                if (!file) return;
+                e.preventDefault();
+                e.stopPropagation();
+                processOcrImage(file);
             });
 
             document.body.addEventListener('keyup', (e) => {
@@ -681,10 +1006,11 @@
                 }
             });
             document.body.addEventListener('dragover', (e) => {
-                e.preventDefault();
                 const list = document.getElementById('product-list');
-                const afterElement = getDragAfterElement(list, e.clientY);
                 const currentDragged = document.querySelector('.dragging');
+                if (!list || !currentDragged) return;
+                e.preventDefault();
+                const afterElement = getDragAfterElement(list, e.clientY);
                 if (afterElement == null) {
                     list.appendChild(currentDragged);
                 } else {
@@ -692,6 +1018,7 @@
                 }
             });
             document.body.addEventListener('drop', (e) => {
+                if (!document.querySelector('.dragging')) return;
                 e.preventDefault();
                 handleDrop();
             });
@@ -834,4 +1161,4 @@
         main();
     </script>
 </body>
-</ht
+</html>
