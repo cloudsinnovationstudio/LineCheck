@@ -268,6 +268,15 @@
         let dataListenersAttached = false;
         let ocrWorkerPromise = null;
         let ocrBusy = false;
+        // Durable OCR UI state — survives Firestore soft re-renders and remounts.
+        let ocrState = {
+            status: 'idle', // idle | processing | preview | error
+            error: '',
+            names: [],
+            replaceExisting: false,
+        };
+        const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1';
+        const TESSERACT_CORE_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1';
 
         const locations = [
             { id: 'arbourBar', name: 'Arbour Bar' },
@@ -609,13 +618,27 @@
                     list.appendChild(item);
                 });
             }
+            // Restore OCR processing/preview/error after any configure (re)mount or soft render.
+            applyOcrUiFromState();
         }
 
         async function getOcrWorker() {
             if (!ocrWorkerPromise) {
                 ocrWorkerPromise = (async () => {
-                    const { createWorker } = await import('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.esm.min.js');
-                    const worker = await createWorker('eng');
+                    // jsDelivr ESM build exposes APIs on `default`, not named exports.
+                    const tessMod = await import(`${TESSERACT_CDN}/dist/tesseract.esm.min.js`);
+                    const createWorker = tessMod.createWorker || tessMod.default?.createWorker;
+                    if (typeof createWorker !== 'function') {
+                        throw new Error('Tesseract createWorker unavailable from CDN module');
+                    }
+                    // Explicit CDN paths — relative defaults break on GitHub Pages (/LineCheck/).
+                    // workerBlobURL must stay true (default): false breaks cross-origin CDN workers.
+                    const worker = await createWorker('eng', 1, {
+                        workerPath: `${TESSERACT_CDN}/dist/worker.min.js`,
+                        corePath: `${TESSERACT_CORE_CDN}/tesseract-core.wasm.js`,
+                        langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+                        logger: () => {},
+                    });
                     await worker.setParameters({
                         tessedit_pageseg_mode: '6',
                         preserve_interword_spaces: '1',
@@ -656,40 +679,15 @@
                 });
         }
 
-        function setOcrUiState({ processing = false, error = '', showPreview = null } = {}) {
-            const dropzone = document.getElementById('ocr-dropzone');
-            const content = document.getElementById('ocr-dropzone-content');
-            const status = document.getElementById('ocr-status');
-            const statusText = document.getElementById('ocr-status-text');
-            const errorEl = document.getElementById('ocr-error');
-            const preview = document.getElementById('ocr-preview');
-            if (!dropzone) return;
-
-            dropzone.classList.toggle('processing', processing);
-            if (content) content.classList.toggle('hidden', processing);
-            if (status) status.classList.toggle('hidden', !processing);
-            if (statusText && processing) statusText.textContent = 'Reading products…';
-
-            if (errorEl) {
-                errorEl.textContent = error || '';
-                errorEl.classList.toggle('hidden', !error);
-            }
-            if (preview && showPreview !== null) {
-                preview.classList.toggle('hidden', !showPreview);
-            }
+        function setOcrState(patch) {
+            ocrState = { ...ocrState, ...patch };
+            applyOcrUiFromState();
         }
 
-        function renderOcrPreview(names) {
-            const preview = document.getElementById('ocr-preview');
+        function fillOcrPreviewList(names) {
             const list = document.getElementById('ocr-preview-list');
-            if (!preview || !list) return;
-
+            if (!list) return;
             list.innerHTML = '';
-            if (names.length === 0) {
-                setOcrUiState({ error: 'No product names found in that image. Try a clearer snip.', showPreview: false });
-                return;
-            }
-
             names.forEach((name, index) => {
                 const item = document.createElement('li');
                 item.className = 'ocr-preview-item flex items-center gap-2';
@@ -710,28 +708,79 @@
                 item.appendChild(nameInput);
                 list.appendChild(item);
             });
-
             const replaceCheckbox = document.getElementById('ocr-replace-existing');
-            if (replaceCheckbox) replaceCheckbox.checked = products.length > 0;
-            setOcrUiState({ error: '', showPreview: true });
+            if (replaceCheckbox) replaceCheckbox.checked = ocrState.replaceExisting;
+        }
+
+        function applyOcrUiFromState() {
+            const dropzone = document.getElementById('ocr-dropzone');
+            if (!dropzone) return;
+
+            const content = document.getElementById('ocr-dropzone-content');
+            const status = document.getElementById('ocr-status');
+            const statusText = document.getElementById('ocr-status-text');
+            const errorEl = document.getElementById('ocr-error');
+            const preview = document.getElementById('ocr-preview');
+            const processing = ocrState.status === 'processing';
+            const showPreview = ocrState.status === 'preview';
+            const error = ocrState.status === 'error' ? (ocrState.error || 'Something went wrong.') : (ocrState.error || '');
+
+            dropzone.classList.toggle('processing', processing);
+            if (content) content.classList.toggle('hidden', processing);
+            if (status) status.classList.toggle('hidden', !processing);
+            if (statusText && processing) statusText.textContent = 'Reading products…';
+
+            if (errorEl) {
+                errorEl.textContent = error;
+                errorEl.classList.toggle('hidden', !error);
+            }
+            if (preview) {
+                preview.classList.toggle('hidden', !showPreview);
+                if (showPreview) {
+                    const list = document.getElementById('ocr-preview-list');
+                    const needsRebuild = !list || list.children.length !== ocrState.names.length;
+                    if (needsRebuild) fillOcrPreviewList(ocrState.names);
+                    else {
+                        const replaceCheckbox = document.getElementById('ocr-replace-existing');
+                        if (replaceCheckbox) replaceCheckbox.checked = ocrState.replaceExisting;
+                    }
+                }
+            }
         }
 
         async function processOcrImage(imageSource) {
             if (ocrBusy || currentView !== 'configure') return;
             ocrBusy = true;
-            setOcrUiState({ processing: true, error: '', showPreview: false });
+            setOcrState({ status: 'processing', error: '', names: [], replaceExisting: products.length > 0 });
 
             try {
                 const worker = await getOcrWorker();
                 const { data: { text } } = await worker.recognize(imageSource);
                 const names = parseProductNamesFromOcr(text || '');
-                renderOcrPreview(names);
+                if (names.length === 0) {
+                    setOcrState({
+                        status: 'error',
+                        error: 'No product names found in that image. Try a clearer snip.',
+                        names: [],
+                    });
+                    return;
+                }
+                setOcrState({
+                    status: 'preview',
+                    error: '',
+                    names,
+                    replaceExisting: products.length > 0,
+                });
             } catch (err) {
                 console.error('OCR failed:', err);
-                setOcrUiState({ error: 'Could not read that image. Please try again.', showPreview: false });
+                const detail = err?.message ? ` (${err.message})` : '';
+                setOcrState({
+                    status: 'error',
+                    error: `Could not read that image.${detail} Try Upload screenshot, or paste again.`,
+                    names: [],
+                });
             } finally {
                 ocrBusy = false;
-                setOcrUiState({ processing: false });
             }
         }
 
@@ -782,7 +831,7 @@
         }
 
         function cancelOcrPreview() {
-            setOcrUiState({ error: '', showPreview: false });
+            setOcrState({ status: 'idle', error: '', names: [], replaceExisting: false });
             const list = document.getElementById('ocr-preview-list');
             if (list) list.innerHTML = '';
             const fileInput = document.getElementById('ocr-file-input');
@@ -809,11 +858,12 @@
         async function handleOcrConfirm() {
             const names = getSelectedOcrNames();
             if (names.length === 0) {
-                setOcrUiState({ error: 'Select at least one product to add.' });
+                setOcrState({ status: 'preview', error: 'Select at least one product to add.' });
                 return;
             }
 
             const replaceExisting = document.getElementById('ocr-replace-existing')?.checked;
+            ocrState.replaceExisting = !!replaceExisting;
             const confirmBtn = document.getElementById('ocr-confirm-btn');
             if (confirmBtn) {
                 confirmBtn.disabled = true;
@@ -836,7 +886,7 @@
                 const namesToAdd = names.filter((name) => !existingNames.has(name.toLowerCase()));
 
                 if (namesToAdd.length === 0) {
-                    setOcrUiState({ error: 'All selected products already exist.', showPreview: true });
+                    setOcrState({ status: 'preview', error: 'All selected products already exist.', names: ocrState.names });
                     return;
                 }
 
@@ -858,7 +908,7 @@
                 cancelOcrPreview();
             } catch (err) {
                 console.error('Failed to add OCR products:', err);
-                setOcrUiState({ error: 'Failed to save products. Please try again.', showPreview: true });
+                setOcrState({ status: 'preview', error: 'Failed to save products. Please try again.', names: ocrState.names });
             } finally {
                 if (confirmBtn) {
                     confirmBtn.disabled = false;
@@ -906,6 +956,9 @@
                 if (e.target.id === 'day-selector') handleDayChange(e);
                 if (e.target.id === 'product-selector') handleProductSelect(e);
                 if (e.target.id === 'room-selector') handleRoomSelect(e);
+                if (e.target.id === 'ocr-replace-existing') {
+                    ocrState.replaceExisting = !!e.target.checked;
+                }
                 if (e.target.id === 'ocr-file-input' && e.target.files?.[0]) {
                     processOcrImage(e.target.files[0]);
                 }
@@ -928,8 +981,9 @@
                 imageFile = await getImageFromClipboardApi();
                 if (!imageFile) {
                     if (!inEditable) {
-                        setOcrUiState({
-                            error: 'No image found on the clipboard. Copy a screenshot first, then paste again (Ctrl+V).',
+                        setOcrState({
+                            status: 'error',
+                            error: 'No image found on the clipboard. Copy a screenshot first, then paste again (Ctrl+V), or use Upload screenshot.',
                         });
                     }
                     return;
