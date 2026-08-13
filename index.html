@@ -351,9 +351,33 @@
             }, (err) => console.error("Counts listener error:", err));
         }
 
+        function expectedViewElementId(view) {
+            return `${view}-view`;
+        }
+
+        function getMountedViewId() {
+            const mainContent = document.getElementById('main-content');
+            return mainContent?.querySelector('#input-view, #view-view, #configure-view')?.id || null;
+        }
+
         function render() {
             if (!userId) return;
             const mainContent = document.getElementById('main-content');
+            const expectedId = expectedViewElementId(currentView);
+            const mountedId = getMountedViewId();
+
+            // Same view already mounted: update in place so Firestore snapshots
+            // do not wipe Configure OCR processing/preview UI (or other local state).
+            if (mountedId === expectedId) {
+                switch (currentView) {
+                    case 'input': renderInputView(); break;
+                    case 'view': renderViewView(); break;
+                    case 'configure': renderConfigureView(); break;
+                }
+                updateNavButtons();
+                return;
+            }
+
             while (mainContent.lastChild && mainContent.lastChild.id !== 'loading') {
                 mainContent.removeChild(mainContent.lastChild);
             }
@@ -807,13 +831,48 @@
 
         function getImageFromClipboardEvent(e) {
             const items = e.clipboardData?.items;
-            if (!items) return null;
-            for (const item of items) {
-                if (item.type.startsWith('image/')) {
-                    return item.getAsFile();
+            if (items) {
+                for (const item of items) {
+                    if (item.type?.startsWith('image/')) {
+                        const file = item.getAsFile();
+                        if (file) return file;
+                    }
+                }
+            }
+            const files = e.clipboardData?.files;
+            if (files) {
+                for (const file of files) {
+                    if (file.type?.startsWith('image/')) return file;
                 }
             }
             return null;
+        }
+
+        async function getImageFromClipboardApi() {
+            if (!navigator.clipboard?.read) return null;
+            try {
+                const clipboardItems = await navigator.clipboard.read();
+                for (const clipboardItem of clipboardItems) {
+                    const imageType = clipboardItem.types.find((type) => type.startsWith('image/'));
+                    if (!imageType) continue;
+                    const blob = await clipboardItem.getType(imageType);
+                    const ext = imageType.split('/')[1] || 'png';
+                    return new File([blob], `clipboard-image.${ext}`, { type: imageType });
+                }
+            } catch (err) {
+                console.warn('clipboard.read() failed:', err);
+            }
+            return null;
+        }
+
+        function isEditablePasteTarget(el) {
+            if (!el || el === document.body) return false;
+            if (el.isContentEditable) return true;
+            const tag = el.tagName;
+            if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+            if (tag !== 'INPUT') return false;
+            const type = (el.type || 'text').toLowerCase();
+            return !['button', 'checkbox', 'radio', 'file', 'submit', 'reset', 'image', 'hidden'].includes(type);
         }
 
         function cancelOcrPreview() {
@@ -946,11 +1005,29 @@
                 }
             });
 
-            document.addEventListener('paste', (e) => {
+            document.addEventListener('paste', async (e) => {
                 if (currentView !== 'configure') return;
-                const imageFile = getImageFromClipboardEvent(e);
-                if (!imageFile) return;
-                e.preventDefault();
+
+                const inEditable = isEditablePasteTarget(document.activeElement);
+                let imageFile = getImageFromClipboardEvent(e);
+                if (imageFile) {
+                    e.preventDefault();
+                    processOcrImage(imageFile);
+                    return;
+                }
+
+                // Win+Shift+S / Snipping Tool often omits image/* from the paste event;
+                // read() must start in this gesture. preventDefault before await when not typing.
+                if (!inEditable) e.preventDefault();
+                imageFile = await getImageFromClipboardApi();
+                if (!imageFile) {
+                    if (!inEditable) {
+                        setOcrUiState({
+                            error: 'No image found on the clipboard. Copy a screenshot first, then paste again (Ctrl+V).',
+                        });
+                    }
+                    return;
+                }
                 processOcrImage(imageFile);
             });
 
