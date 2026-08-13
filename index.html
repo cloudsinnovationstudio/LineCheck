@@ -262,6 +262,7 @@
         let counts = {};
         let currentView = 'input';
         let viewPageMode = 'daily';
+        let viewRoomsMode = false;
         let inputMode = 'byProduct';
         let selectedProductId = null;
         let selectedRoomId = null;
@@ -486,7 +487,27 @@
             if (!controls || !content) return;
             controls.innerHTML = '';
             content.innerHTML = '';
-            
+
+            const buttonGroup = document.createElement('div');
+            buttonGroup.className = 'flex flex-wrap items-center gap-2';
+
+            const roomsBtn = document.createElement('button');
+            roomsBtn.id = 'toggle-rooms-mode-btn';
+            roomsBtn.className = 'text-white px-4 py-2 rounded-md shadow';
+            roomsBtn.style.backgroundColor = 'var(--accent-color)';
+            roomsBtn.textContent = viewRoomsMode ? 'Hide rooms' : 'Rooms';
+
+            if (viewRoomsMode) {
+                const title = document.createElement('h2');
+                title.className = 'text-xl font-bold';
+                title.textContent = 'Rooms Breakdown';
+                controls.appendChild(title);
+                buttonGroup.appendChild(roomsBtn);
+                controls.appendChild(buttonGroup);
+                renderRoomsBreakdown(content);
+                return;
+            }
+
             const toggleBtn = document.createElement('button');
             toggleBtn.id = 'toggle-view-mode-btn';
             toggleBtn.className = 'text-white px-4 py-2 rounded-md shadow';
@@ -508,7 +529,100 @@
                 controls.appendChild(title);
                 renderWeeklySummary(content);
             }
-            controls.appendChild(toggleBtn);
+            buttonGroup.appendChild(roomsBtn);
+            buttonGroup.appendChild(toggleBtn);
+            controls.appendChild(buttonGroup);
+        }
+
+        function getLocationCount(productId, day, locationId) {
+            return Number(counts[productId]?.[day]?.[locationId]) || 0;
+        }
+
+        function renderRoomsBreakdown(container) {
+            container.innerHTML = '';
+            if (products.length === 0) return;
+
+            const currentDayIndex = days.indexOf(currentDay);
+
+            products.forEach((product) => {
+                const section = document.createElement('div');
+                section.className = 'mb-6';
+
+                const heading = document.createElement('h3');
+                heading.className = 'text-lg font-semibold mb-2';
+                heading.textContent = product.name;
+                section.appendChild(heading);
+
+                const table = document.createElement('table');
+                table.className = 'summary-table';
+                const thead = table.createTHead();
+                const headerRow = thead.insertRow();
+                ['Room', ...days, 'Total'].forEach((headerText) => {
+                    const th = document.createElement('th');
+                    const day = headerText.toLowerCase();
+                    const dayIndex = days.indexOf(day);
+
+                    if (dayIndex !== -1 && dayIndex < currentDayIndex) {
+                        const allZero = products.every((p) => calculateProductTotal(p.id, day) === 0);
+                        if (allZero) {
+                            th.style.backgroundColor = 'var(--danger-color)';
+                            th.style.color = 'white';
+                        }
+                    } else if (day === currentDay) {
+                        th.style.backgroundColor = 'var(--table-highlight)';
+                    }
+
+                    if (headerText === 'Total') th.classList.add('font-bold');
+                    th.textContent = days.includes(day)
+                        ? headerText.slice(0, 3).toUpperCase()
+                        : headerText;
+                    headerRow.appendChild(th);
+                });
+
+                const tbody = table.createTBody();
+                const dayTotals = Object.fromEntries(days.map((day) => [day, 0]));
+
+                locations.forEach((location) => {
+                    const row = tbody.insertRow();
+                    row.insertCell().textContent = location.name;
+                    let roomWeekTotal = 0;
+                    days.forEach((day) => {
+                        const value = getLocationCount(product.id, day, location.id);
+                        roomWeekTotal += value;
+                        dayTotals[day] += value;
+                        const cell = row.insertCell();
+                        cell.textContent = value.toFixed(1);
+                        if (day === currentDay) {
+                            cell.style.backgroundColor = 'var(--table-highlight-faint)';
+                        }
+                    });
+                    const totalCell = row.insertCell();
+                    totalCell.textContent = roomWeekTotal.toFixed(1);
+                    totalCell.classList.add('font-bold');
+                });
+
+                const totalRow = tbody.insertRow();
+                const totalLabel = totalRow.insertCell();
+                totalLabel.textContent = 'Total';
+                totalLabel.classList.add('font-bold');
+                let grandTotal = 0;
+                days.forEach((day) => {
+                    const value = dayTotals[day];
+                    grandTotal += value;
+                    const cell = totalRow.insertCell();
+                    cell.textContent = value.toFixed(1);
+                    cell.classList.add('font-bold');
+                    if (day === currentDay) {
+                        cell.style.backgroundColor = 'var(--table-highlight-faint)';
+                    }
+                });
+                const grandTotalCell = totalRow.insertCell();
+                grandTotalCell.textContent = grandTotal.toFixed(1);
+                grandTotalCell.classList.add('font-bold');
+
+                section.appendChild(table);
+                container.appendChild(section);
+            });
         }
 
         function renderDailyTotals(container) {
@@ -935,6 +1049,7 @@
                 if (target.id === 'logout-button') await signOut(auth);
                 if (target.id === 'theme-toggle') toggleTheme();
                 if (target.id === 'toggle-view-mode-btn') handleToggleViewMode();
+                if (target.id === 'toggle-rooms-mode-btn') handleToggleRoomsMode();
                 if (target.classList.contains('delete-product-btn')) handleDeleteProduct(target);
                 if (target.id === 'add-product-btn') handleAddProduct();
                 if (target.id === 'ocr-upload-btn') {
@@ -1110,6 +1225,7 @@
             render();
         }
         function handleToggleViewMode() { viewPageMode = viewPageMode === 'daily' ? 'weekly' : 'daily'; render(); }
+        function handleToggleRoomsMode() { viewRoomsMode = !viewRoomsMode; render(); }
         function handleNavClick(target) { 
             if (target.dataset.view === 'input') {
                 currentDay = days[(new Date().getDay() + 6) % 7];
