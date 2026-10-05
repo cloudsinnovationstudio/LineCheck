@@ -350,6 +350,22 @@
             return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
         }
 
+        function roundHundredth(n) {
+            return Math.round((n + Number.EPSILON) * 100) / 100;
+        }
+
+        function formatKegCount(n) {
+            const rounded = roundHundredth(n);
+            if (!Number.isFinite(rounded)) return '';
+            if (Number.isInteger(rounded)) return String(rounded);
+            const text = rounded.toFixed(2);
+            return text.endsWith('0') ? text.slice(0, -1) : text;
+        }
+
+        function kegsFromLitres(litres, spec) {
+            return roundHundredth(litres / spec.capacity);
+        }
+
         function formatTypedWeight(raw) {
             const text = String(raw ?? '').trim();
             if (/^\d+(\.\d+)?$/.test(text)) return text;
@@ -357,44 +373,42 @@
             return Number.isFinite(weight) ? String(weight) : text;
         }
 
-        // Scale kg minus the empty keg. 1kg of beer = 1L. Result is capped at the keg size.
+        // Scale kg minus the empty keg (1kg = 1L), then divide by the full keg size.
+        // 37L in a 50L keg is saved as 0.74.
         function kegWeightResult(raw, spec, savedCount) {
             const text = String(raw ?? '').trim();
             if (text === '') {
                 const saved = Number(savedCount);
                 const tare = `${formatAmount(spec.emptyKg)}kg empty`;
                 return {
-                    litres: null,
+                    count: null,
                     status: 'empty',
                     text: Number.isFinite(saved) && saved !== 0
-                        ? `Saved ${formatAmount(saved)} · minus ${tare}`
-                        : `Minus ${tare} · 1kg = 1L`,
+                        ? `Saved ${formatKegCount(saved)} · minus ${tare}`
+                        : `Minus ${tare} · litres ÷ ${spec.capacity}`,
                 };
             }
             const weight = Number(text);
             if (!Number.isFinite(weight)) {
-                return { litres: null, status: 'invalid', text: 'Enter the scale weight in kg' };
+                return { count: null, status: 'invalid', text: 'Enter the scale weight in kg' };
             }
             const net = weight - spec.emptyKg;
             if (net <= 0) {
                 return {
-                    litres: 0,
+                    count: 0,
                     status: 'below-empty',
                     text: `Below ${formatAmount(spec.emptyKg)}kg empty · count 0`,
                 };
             }
-            if (net > spec.capacity) {
-                return {
-                    litres: spec.capacity,
-                    status: 'capped',
-                    text: `${formatTypedWeight(text)} − ${formatAmount(spec.emptyKg)} = ${formatAmount(net)}L · capped at ${spec.capacity}L`,
-                };
-            }
-            const litres = roundTenth(net);
+            const capped = net > spec.capacity;
+            const litres = roundTenth(capped ? spec.capacity : net);
+            const count = kegsFromLitres(litres, spec);
+            const formula = `${formatTypedWeight(text)} − ${formatAmount(spec.emptyKg)} = ${formatAmount(net)}L`;
+            const divided = `${formatAmount(litres)} / ${spec.capacity} = ${formatKegCount(count)}`;
             return {
-                litres,
-                status: 'ok',
-                text: `${formatTypedWeight(text)} − ${formatAmount(spec.emptyKg)} = ${formatAmount(litres)}L`,
+                count,
+                status: capped ? 'capped' : 'ok',
+                text: capped ? `${formula} · capped at ${spec.capacity}L · ${divided}` : `${formula} · ${divided}`,
             };
         }
         /* KEG_LOGIC_END */
@@ -661,7 +675,7 @@
             bar.style.borderColor = 'var(--border-color)';
             bar.innerHTML = `
                 <p class="font-semibold">${escapeHtml(spec.label)}</p>
-                <p class="text-sm" style="color: var(--text-secondary);">Empty keg ${formatAmount(spec.emptyKg)}kg. Weight saves as litres (1kg = 1L).</p>`;
+                <p class="text-sm" style="color: var(--text-secondary);">Empty keg ${formatAmount(spec.emptyKg)}kg. Litres are divided by ${spec.capacity} to get kegs.</p>`;
             return bar;
         }
 
@@ -737,6 +751,13 @@
             
             roomContainer.appendChild(productList);
             container.appendChild(roomContainer);
+        }
+
+        function formatCount(n) {
+            const rounded = roundHundredth(Number(n) || 0);
+            if (Number.isInteger(rounded)) return rounded.toFixed(1);
+            const text = rounded.toFixed(2);
+            return text.endsWith('0') ? text.slice(0, -1) : text;
         }
 
         function calculateProductTotal(productId, day) {
@@ -854,13 +875,13 @@
                         roomWeekTotal += value;
                         dayTotals[day] += value;
                         const cell = row.insertCell();
-                        cell.textContent = value.toFixed(1);
+                        cell.textContent = formatCount(value);
                         if (day === currentDay) {
                             cell.style.backgroundColor = 'var(--table-highlight-faint)';
                         }
                     });
                     const totalCell = row.insertCell();
-                    totalCell.textContent = roomWeekTotal.toFixed(1);
+                    totalCell.textContent = formatCount(roomWeekTotal);
                     totalCell.classList.add('font-bold');
                 });
 
@@ -873,14 +894,14 @@
                     const value = dayTotals[day];
                     grandTotal += value;
                     const cell = totalRow.insertCell();
-                    cell.textContent = value.toFixed(1);
+                    cell.textContent = formatCount(value);
                     cell.classList.add('font-bold');
                     if (day === currentDay) {
                         cell.style.backgroundColor = 'var(--table-highlight-faint)';
                     }
                 });
                 const grandTotalCell = totalRow.insertCell();
-                grandTotalCell.textContent = grandTotal.toFixed(1);
+                grandTotalCell.textContent = formatCount(grandTotal);
                 grandTotalCell.classList.add('font-bold');
 
                 section.appendChild(table);
@@ -900,7 +921,7 @@
                 if(index % 2 !== 0) {
                     item.style.backgroundColor = 'var(--bg-tertiary)';
                 }
-                item.innerHTML = `<span>${product.name}</span><span class="font-bold text-lg">${total.toFixed(1)}</span>`;
+                item.innerHTML = `<span>${product.name}</span><span class="font-bold text-lg">${formatCount(total)}</span>`;
                 list.appendChild(item);
             });
             container.appendChild(list);
@@ -954,7 +975,7 @@
                 days.forEach(day => {
                     const total = calculateProductTotal(product.id, day);
                     const cell = row.insertCell();
-                    cell.textContent = total.toFixed(1);
+                    cell.textContent = formatCount(total);
                     if (day === currentDay) {
                         cell.style.backgroundColor = 'var(--table-highlight-faint)';
                     }
@@ -1560,9 +1581,9 @@
             if (!spec || !productId || !locationId) return;
             kegWeightDrafts[kegDraftKey(productId, locationId, day)] = e.target.value;
             const result = kegWeightResult(e.target.value, spec);
-            if (result.litres === null) return;
+            if (result.count === null) return;
             const countRef = doc(db, 'counts', productId);
-            await setDoc(countRef, { [day]: { [locationId]: result.litres } }, { merge: true });
+            await setDoc(countRef, { [day]: { [locationId]: result.count } }, { merge: true });
         }
 
         async function handleOpeningStockChange(e) {
