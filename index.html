@@ -121,6 +121,14 @@
             padding: 0.35rem 0.5rem;
             width: 100%;
         }
+        .keg-mode-btn[aria-pressed="true"] {
+            background-color: var(--accent-color);
+            color: white;
+        }
+        .keg-mode-btn[aria-pressed="false"] {
+            background-color: var(--bg-tertiary);
+            color: var(--text-secondary);
+        }
     </style>
 </head>
 <body>
@@ -289,6 +297,180 @@
         ];
         const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
         let currentDay = days[(new Date().getDay() + 6) % 7];
+        let kegInputModes = loadKegInputModes();
+        // In-progress scale readings, so a Firestore refresh does not clear a weight mid-entry.
+        const kegWeightDrafts = {};
+
+        /* KEG_LOGIC_START */
+        const KEG_SPECS = {
+            standard50: { capacity: 50, emptyKg: 13, label: '50L' },
+            rubber50: { capacity: 50, emptyKg: 13.7, label: 'Rubber 50L' },
+            standard30: { capacity: 30, emptyKg: 10.5, label: '30L' },
+            rubber30: { capacity: 30, emptyKg: 10.9, label: 'Rubber 30L' },
+        };
+
+        function normaliseProductName(name) {
+            return String(name || '')
+                .toLowerCase()
+                .replace(/&/g, ' and ')
+                .replace(/[^a-z0-9]+/g, ' ')
+                .trim()
+                .replace(/\s+/g, ' ');
+        }
+
+        function hasWord(normalised, word) {
+            return new RegExp(`(?:^| )${word}(?: |$)`).test(normalised);
+        }
+
+        function isKopparbergSL(normalised) {
+            if (!hasWord(normalised, 'kopparberg')) return false;
+            if (hasWord(normalised, 'strawberry')) return true;
+            if (hasWord(normalised, 'sl')) return true;
+            return normalised.includes('s and l') || /(?:^| )s l(?: |$)/.test(normalised);
+        }
+
+        function getKegSpec(productName) {
+            const normalised = normaliseProductName(productName);
+            if (!normalised.startsWith('dr ')) return null;
+            if (isKopparbergSL(normalised)) return KEG_SPECS.standard30;
+            if (hasWord(normalised, 'camden') && hasWord(normalised, 'pale')) return KEG_SPECS.rubber50;
+            if (hasWord(normalised, 'camden') && (hasWord(normalised, 'eazy') || hasWord(normalised, 'easy'))) return KEG_SPECS.rubber30;
+            if (hasWord(normalised, 'midway')) return KEG_SPECS.standard30;
+            return KEG_SPECS.standard50;
+        }
+
+        function roundTenth(n) {
+            return Math.round((n + Number.EPSILON) * 10) / 10;
+        }
+
+        function formatAmount(n) {
+            const rounded = roundTenth(n);
+            if (!Number.isFinite(rounded)) return '';
+            return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+        }
+
+        function formatTypedWeight(raw) {
+            const text = String(raw ?? '').trim();
+            if (/^\d+(\.\d+)?$/.test(text)) return text;
+            const weight = Number(text);
+            return Number.isFinite(weight) ? String(weight) : text;
+        }
+
+        // Scale kg minus the empty keg. 1kg of beer = 1L. Result is capped at the keg size.
+        function kegWeightResult(raw, spec, savedCount) {
+            const text = String(raw ?? '').trim();
+            if (text === '') {
+                const saved = Number(savedCount);
+                const tare = `${formatAmount(spec.emptyKg)}kg empty`;
+                return {
+                    litres: null,
+                    status: 'empty',
+                    text: Number.isFinite(saved) && saved !== 0
+                        ? `Saved ${formatAmount(saved)} · minus ${tare}`
+                        : `Minus ${tare} · 1kg = 1L`,
+                };
+            }
+            const weight = Number(text);
+            if (!Number.isFinite(weight)) {
+                return { litres: null, status: 'invalid', text: 'Enter the scale weight in kg' };
+            }
+            const net = weight - spec.emptyKg;
+            if (net <= 0) {
+                return {
+                    litres: 0,
+                    status: 'below-empty',
+                    text: `Below ${formatAmount(spec.emptyKg)}kg empty · count 0`,
+                };
+            }
+            if (net > spec.capacity) {
+                return {
+                    litres: spec.capacity,
+                    status: 'capped',
+                    text: `${formatTypedWeight(text)} − ${formatAmount(spec.emptyKg)} = ${formatAmount(net)}L · capped at ${spec.capacity}L`,
+                };
+            }
+            const litres = roundTenth(net);
+            return {
+                litres,
+                status: 'ok',
+                text: `${formatTypedWeight(text)} − ${formatAmount(spec.emptyKg)} = ${formatAmount(litres)}L`,
+            };
+        }
+        /* KEG_LOGIC_END */
+
+        function loadKegInputModes() {
+            try {
+                const parsed = JSON.parse(localStorage.getItem('kegInputModes') || '{}');
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+                return parsed;
+            } catch (err) {
+                return {};
+            }
+        }
+
+        function getKegInputMode(productId) {
+            return kegInputModes[productId] === 'weight' ? 'weight' : 'number';
+        }
+
+        function kegDraftKey(productId, locationId, day = currentDay) {
+            return `${day}|${productId}|${locationId}`;
+        }
+
+        function clearKegDraftsForProduct(productId, day = currentDay) {
+            const prefix = `${day}|${productId}|`;
+            Object.keys(kegWeightDrafts).forEach((key) => {
+                if (key.startsWith(prefix)) delete kegWeightDrafts[key];
+            });
+        }
+
+        function setKegInputMode(productId, mode) {
+            if (mode !== 'number' && mode !== 'weight') return;
+            if (mode === 'number') clearKegDraftsForProduct(productId, currentDay);
+            kegInputModes[productId] = mode;
+            try {
+                localStorage.setItem('kegInputModes', JSON.stringify(kegInputModes));
+            } catch (err) {
+                // The choice still applies for this session if storage is blocked.
+            }
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function kegModeToggleHtml(productId) {
+            const mode = getKegInputMode(productId);
+            const button = (value, label, radius) => `
+                <button type="button" data-product-id="${escapeHtml(productId)}" data-keg-mode="${value}" aria-pressed="${mode === value}" class="keg-mode-btn px-3 py-1 text-sm border ${radius}" style="border-color: var(--border-color);">${label}</button>`;
+            return `<div class="inline-flex rounded-md shadow-sm" role="group" aria-label="Keg entry method">${button('number', 'Number', 'rounded-l-md')}${button('weight', 'Weight', 'rounded-r-md -ml-px')}</div>`;
+        }
+
+        function numberCountInputHtml(productId, locationId, value) {
+            return `<input type="number" id="${escapeHtml(locationId)}-${escapeHtml(productId)}" data-product-id="${escapeHtml(productId)}" data-location-id="${escapeHtml(locationId)}" data-day="${currentDay}" value="${escapeHtml(value)}" class="count-input w-20 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);" inputmode="decimal" step="any">`;
+        }
+
+        function weightCountInputHtml(product, locationId, savedCount, { showLabel }) {
+            const spec = getKegSpec(product.name);
+            const draft = kegWeightDrafts[kegDraftKey(product.id, locationId, currentDay)] ?? '';
+            const result = kegWeightResult(draft, spec, savedCount);
+            const inputId = `w-${locationId}-${product.id}`;
+            const previewId = `keg-preview-${locationId}-${product.id}`;
+            const label = showLabel
+                ? `<label for="${escapeHtml(inputId)}" class="text-sm">Weight (kg)</label>`
+                : `<span class="text-xs" style="color: var(--text-secondary);">kg</span>`;
+            return `
+                <div class="keg-weight-field">
+                    <div class="flex items-center ${showLabel ? 'justify-between' : 'justify-end'} gap-2">
+                        ${label}
+                        <input type="number" id="${escapeHtml(inputId)}" data-product-id="${escapeHtml(product.id)}" data-location-id="${escapeHtml(locationId)}" data-day="${currentDay}" value="${escapeHtml(draft)}" class="keg-weight-input w-24 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);" inputmode="decimal" step="0.1" min="0" placeholder="0.0" aria-describedby="${escapeHtml(previewId)}" autocomplete="off">
+                    </div>
+                    <p id="${escapeHtml(previewId)}" class="keg-weight-preview text-xs text-right mt-1 ml-auto max-w-[16rem]" style="color: var(--text-secondary);">${escapeHtml(result.text)}</p>
+                </div>`;
+        }
 
         function main() {
             const app = initializeApp(firebaseConfig);
@@ -345,11 +527,31 @@
             return mainContent?.querySelector('#input-view, #view-view, #configure-view')?.id || null;
         }
 
+        function captureInputFocus() {
+            const el = document.activeElement;
+            if (!el || el.tagName !== 'INPUT' || !el.id) return null;
+            if (!el.classList.contains('count-input') && !el.classList.contains('keg-weight-input')) return null;
+            return { id: el.id, start: el.selectionStart, end: el.selectionEnd };
+        }
+
+        function restoreInputFocus(snapshot) {
+            if (!snapshot) return;
+            const el = document.getElementById(snapshot.id);
+            if (!el) return;
+            el.focus();
+            try {
+                if (typeof snapshot.start === 'number') el.setSelectionRange(snapshot.start, snapshot.end);
+            } catch (err) {
+                // Some browsers reject selection ranges on number inputs.
+            }
+        }
+
         function render() {
             if (!userId) return;
             const mainContent = document.getElementById('main-content');
             const expectedId = expectedViewElementId(currentView);
             const mountedId = getMountedViewId();
+            const focusSnapshot = captureInputFocus();
 
             // Same view already mounted: update in place so Firestore snapshots
             // do not wipe Configure OCR processing/preview UI (or other local state).
@@ -360,6 +562,7 @@
                     case 'configure': renderConfigureView(); break;
                 }
                 updateNavButtons();
+                restoreInputFocus(focusSnapshot);
                 return;
             }
 
@@ -372,6 +575,7 @@
                 case 'configure': mainContent.appendChild(document.getElementById('configure-view-template').content.cloneNode(true)); renderConfigureView(); break;
             }
             updateNavButtons();
+            restoreInputFocus(focusSnapshot);
         }
 
         function renderDaySelector(containerId) {
@@ -430,21 +634,48 @@
             }
         }
 
+        function renderKegEntryBar(product) {
+            const spec = getKegSpec(product.name);
+            if (!spec) return null;
+            const bar = document.createElement('div');
+            bar.className = 'rounded-lg shadow p-4 border mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3';
+            bar.style.backgroundColor = 'var(--bg-secondary)';
+            bar.style.borderColor = 'var(--border-color)';
+            bar.innerHTML = `
+                <div>
+                    <p class="font-semibold">${escapeHtml(spec.label)}</p>
+                    <p class="text-sm" style="color: var(--text-secondary);">Empty keg ${formatAmount(spec.emptyKg)}kg. Weight saves as litres (1kg = 1L).</p>
+                </div>
+                ${kegModeToggleHtml(product.id)}`;
+            return bar;
+        }
+
         function renderInputByProduct(container) {
+            const product = products.find(p => p.id === selectedProductId);
+            if (!product) return;
+            const spec = getKegSpec(product.name);
+            const kegBar = spec ? renderKegEntryBar(product) : null;
+            if (kegBar) container.appendChild(kegBar);
+
+            const weigh = spec && getKegInputMode(product.id) === 'weight';
             const standardContainer = document.createElement('div');
             standardContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
             locations.forEach(location => {
-                const count = counts[selectedProductId]?.[currentDay]?.[location.id] || 0;
+                const count = counts[product.id]?.[currentDay]?.[location.id] || 0;
                 const locationEl = document.createElement('div');
                 locationEl.className = 'rounded-lg shadow p-6 border';
                 locationEl.style.backgroundColor = 'var(--bg-secondary)';
                 locationEl.style.borderColor = 'var(--border-color)';
-                locationEl.innerHTML = `
-                    <h3 class="text-lg font-bold mb-4">${location.name}</h3>
+                const control = weigh
+                    ? weightCountInputHtml(product, location.id, count, { showLabel: true })
+                    : `
                     <div class="flex items-center justify-between">
-                        <label for="${location.id}-${selectedProductId}" class="text-sm">Count</label>
-                        <input type="number" id="${location.id}-${selectedProductId}" data-product-id="${selectedProductId}" data-location-id="${location.id}" value="${count}" class="count-input w-20 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);">
+                        <label for="${location.id}-${product.id}" class="text-sm">Count</label>
+                        ${numberCountInputHtml(product.id, location.id, count)}
                     </div>`;
+                locationEl.innerHTML = `
+                    <h3 class="text-lg font-bold mb-4">${escapeHtml(location.name)}</h3>
+                    ${control}`;
                 standardContainer.appendChild(locationEl);
             });
             container.appendChild(standardContainer);
@@ -456,19 +687,39 @@
             roomContainer.className = 'rounded-lg shadow p-6 border';
             roomContainer.style.backgroundColor = 'var(--bg-secondary)';
             roomContainer.style.borderColor = 'var(--border-color)';
-            roomContainer.innerHTML = `<h2 class="text-xl font-bold mb-4">Editing: ${roomName}</h2>`;
+            roomContainer.innerHTML = `<h2 class="text-xl font-bold mb-4">Editing: ${escapeHtml(roomName)}</h2>`;
             
             const productList = document.createElement('div');
             productList.className = 'space-y-3';
 
             products.forEach(product => {
                 const count = counts[product.id]?.[currentDay]?.[selectedRoomId] || 0;
+                const spec = getKegSpec(product.name);
                 const productRow = document.createElement('div');
-                productRow.className = 'flex items-center justify-between';
-                productRow.innerHTML = `
-                    <label for="${selectedRoomId}-${product.id}" class="text-sm">${product.name}</label>
-                    <input type="number" id="${selectedRoomId}-${product.id}" data-product-id="${product.id}" data-location-id="${selectedRoomId}" value="${count}" class="count-input w-20 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);">
-                `;
+                if (!spec) {
+                    productRow.className = 'flex items-center justify-between gap-3';
+                    productRow.innerHTML = `
+                        <label for="${selectedRoomId}-${product.id}" class="text-sm">${escapeHtml(product.name)}</label>
+                        ${numberCountInputHtml(product.id, selectedRoomId, count)}
+                    `;
+                } else {
+                    const weigh = getKegInputMode(product.id) === 'weight';
+                    const inputId = weigh ? `w-${selectedRoomId}-${product.id}` : `${selectedRoomId}-${product.id}`;
+                    productRow.className = 'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between';
+                    const control = weigh
+                        ? weightCountInputHtml(product, selectedRoomId, count, { showLabel: false })
+                        : numberCountInputHtml(product.id, selectedRoomId, count);
+                    productRow.innerHTML = `
+                        <div class="min-w-0">
+                            <label for="${escapeHtml(inputId)}" class="text-sm">${escapeHtml(product.name)}</label>
+                            <p class="text-xs" style="color: var(--text-secondary);">${escapeHtml(spec.label)} · empty ${formatAmount(spec.emptyKg)}kg</p>
+                        </div>
+                        <div class="flex flex-wrap items-start justify-end gap-2">
+                            ${kegModeToggleHtml(product.id)}
+                            ${control}
+                        </div>
+                    `;
+                }
                 productList.appendChild(productRow);
             });
             
@@ -1059,6 +1310,7 @@
                 if (target.id === 'ocr-cancel-btn') cancelOcrPreview();
                 if (target.classList.contains('nav-button')) handleNavClick(target);
                 if (target.classList.contains('input-mode-btn')) handleInputModeChange(target);
+                if (target.classList.contains('keg-mode-btn')) handleKegModeChange(target);
             });
 
             document.body.addEventListener('click', (e) => {
@@ -1136,8 +1388,13 @@
                 if (e.target.id === 'password-input' && e.key === 'Enter') document.getElementById('login-submit').click();
             });
 
+            document.body.addEventListener('input', (e) => {
+                if (e.target.classList.contains('keg-weight-input')) updateKegWeightPreview(e.target);
+            });
+
             document.body.addEventListener('input', debounce((e) => {
                 if (e.target.classList.contains('count-input')) handleCountChange(e);
+                if (e.target.classList.contains('keg-weight-input')) handleKegWeightChange(e);
                 if (e.target.classList.contains('opening-stock-input')) handleOpeningStockChange(e);
             }, 1500));
             
@@ -1224,6 +1481,13 @@
             }
             render();
         }
+        function handleKegModeChange(target) {
+            const productId = target.dataset.productId;
+            const mode = target.dataset.kegMode;
+            if (!productId || getKegInputMode(productId) === mode) return;
+            setKegInputMode(productId, mode);
+            render();
+        }
         function handleToggleViewMode() { viewPageMode = viewPageMode === 'daily' ? 'weekly' : 'daily'; render(); }
         function handleToggleRoomsMode() { viewRoomsMode = !viewRoomsMode; render(); }
         function handleNavClick(target) { 
@@ -1256,11 +1520,38 @@
             await batch.commit();
         }
 
+        function updateKegWeightPreview(input) {
+            const product = products.find((p) => p.id === input.dataset.productId);
+            const spec = product ? getKegSpec(product.name) : null;
+            const preview = input.closest('.keg-weight-field')?.querySelector('.keg-weight-preview');
+            if (!spec || !preview || !input.dataset.locationId) return;
+            const day = input.dataset.day || currentDay;
+            kegWeightDrafts[kegDraftKey(input.dataset.productId, input.dataset.locationId, day)] = input.value;
+            const saved = counts[input.dataset.productId]?.[day]?.[input.dataset.locationId] || 0;
+            preview.textContent = kegWeightResult(input.value, spec, saved).text;
+        }
+
         async function handleCountChange(e) {
             const { productId, locationId } = e.target.dataset;
+            const day = e.target.dataset.day || currentDay;
             const value = e.target.value;
+            if (!productId || !locationId) return;
+            clearKegDraftsForProduct(productId, day);
             const countRef = doc(db, 'counts', productId);
-            await setDoc(countRef, { [currentDay]: { [locationId]: Number(value) || 0 } }, { merge: true });
+            await setDoc(countRef, { [day]: { [locationId]: Number(value) || 0 } }, { merge: true });
+        }
+
+        async function handleKegWeightChange(e) {
+            const { productId, locationId } = e.target.dataset;
+            const day = e.target.dataset.day || currentDay;
+            const product = products.find((p) => p.id === productId);
+            const spec = product ? getKegSpec(product.name) : null;
+            if (!spec || !productId || !locationId) return;
+            kegWeightDrafts[kegDraftKey(productId, locationId, day)] = e.target.value;
+            const result = kegWeightResult(e.target.value, spec);
+            if (result.litres === null) return;
+            const countRef = doc(db, 'counts', productId);
+            await setDoc(countRef, { [day]: { [locationId]: result.litres } }, { merge: true });
         }
 
         async function handleOpeningStockChange(e) {
