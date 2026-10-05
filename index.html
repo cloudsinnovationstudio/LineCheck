@@ -129,6 +129,11 @@
             background-color: var(--bg-tertiary);
             color: var(--text-secondary);
         }
+        .keg-add-btn {
+            min-width: 2.25rem;
+            min-height: 2.25rem;
+            line-height: 1;
+        }
     </style>
 </head>
 <body>
@@ -299,8 +304,9 @@
         const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
         let currentDay = days[(new Date().getDay() + 6) % 7];
         let kegInputMode = loadKegInputMode();
-        // In-progress scale readings, so a Firestore refresh does not clear a weight mid-entry.
+        // In-progress entries, so a Firestore refresh does not clear a keg mid-entry.
         const kegWeightDrafts = {};
+        const kegAddDrafts = {};
 
         /* KEG_LOGIC_START */
         const KEG_SPECS = {
@@ -429,18 +435,14 @@
             return `${day}|${productId}|${locationId}`;
         }
 
-        function clearKegDraftsForProduct(productId, day = currentDay) {
-            const prefix = `${day}|${productId}|`;
-            Object.keys(kegWeightDrafts).forEach((key) => {
-                if (key.startsWith(prefix)) delete kegWeightDrafts[key];
-            });
+        function clearDraftMap(drafts) {
+            Object.keys(drafts).forEach((key) => delete drafts[key]);
         }
 
         function setKegInputMode(mode) {
             if (mode !== 'number' && mode !== 'weight') return;
-            if (mode === 'number') {
-                Object.keys(kegWeightDrafts).forEach((key) => delete kegWeightDrafts[key]);
-            }
+            clearDraftMap(kegWeightDrafts);
+            clearDraftMap(kegAddDrafts);
             kegInputMode = mode;
             try {
                 localStorage.setItem('kegInputMode', mode);
@@ -469,22 +471,45 @@
             return `<input type="number" id="${escapeHtml(locationId)}-${escapeHtml(productId)}" data-product-id="${escapeHtml(productId)}" data-location-id="${escapeHtml(locationId)}" data-day="${currentDay}" value="${escapeHtml(value)}" class="count-input w-20 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);" inputmode="decimal" step="any">`;
         }
 
-        function weightCountInputHtml(product, locationId, savedCount, { showLabel }) {
+        function kegLineControlHtml(product, locationId, savedCount, { stacked }) {
             const spec = getKegSpec(product.name);
-            const draft = kegWeightDrafts[kegDraftKey(product.id, locationId, currentDay)] ?? '';
-            const result = kegWeightResult(draft, spec, savedCount);
-            const inputId = `w-${locationId}-${product.id}`;
+            const weigh = getKegInputMode() === 'weight';
+            const draftKey = kegDraftKey(product.id, locationId, currentDay);
+            const entryId = weigh ? `w-${locationId}-${product.id}` : `add-${locationId}-${product.id}`;
+            const totalId = `total-${locationId}-${product.id}`;
             const previewId = `keg-preview-${locationId}-${product.id}`;
-            const label = showLabel
-                ? `<label for="${escapeHtml(inputId)}" class="text-sm">Weight (kg)</label>`
-                : `<span class="text-xs" style="color: var(--text-secondary);">kg</span>`;
+            const draft = weigh ? (kegWeightDrafts[draftKey] ?? '') : (kegAddDrafts[draftKey] ?? '');
+            const result = weigh ? kegWeightResult(draft, spec, savedCount) : null;
+            const entry = weigh
+                ? `<input type="number" id="${escapeHtml(entryId)}" data-product-id="${escapeHtml(product.id)}" data-location-id="${escapeHtml(locationId)}" data-day="${currentDay}" value="${escapeHtml(draft)}" class="keg-weight-input w-24 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);" inputmode="decimal" step="0.1" min="0" placeholder="0.0" aria-describedby="${escapeHtml(previewId)}" autocomplete="off">`
+                : `<input type="number" id="${escapeHtml(entryId)}" data-product-id="${escapeHtml(product.id)}" data-location-id="${escapeHtml(locationId)}" data-day="${currentDay}" value="${escapeHtml(draft)}" class="keg-add-input w-20 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);" inputmode="decimal" step="any" placeholder="Add" autocomplete="off">`;
+            const addButton = `<button type="button" class="keg-add-btn shrink-0 text-white px-3 rounded-md shadow text-lg" style="background-color: var(--accent-color);" data-product-id="${escapeHtml(product.id)}" data-location-id="${escapeHtml(locationId)}" data-day="${currentDay}" aria-label="Add to total">+</button>`;
+            const entryLabel = stacked
+                ? `<label for="${escapeHtml(entryId)}" class="text-sm">${weigh ? 'Weight (kg)' : 'Add'}</label>`
+                : (weigh ? `<span class="text-xs" style="color: var(--text-secondary);">kg</span>` : '');
+            const preview = weigh
+                ? `<p id="${escapeHtml(previewId)}" class="keg-weight-preview text-xs text-right mt-1 ml-auto max-w-[18rem]" style="color: var(--text-secondary);">${escapeHtml(result.text)}</p>`
+                : '';
+            const total = `
+                <label for="${escapeHtml(totalId)}" class="text-sm">Total</label>
+                <input type="number" id="${escapeHtml(totalId)}" data-product-id="${escapeHtml(product.id)}" data-location-id="${escapeHtml(locationId)}" data-day="${currentDay}" value="${escapeHtml(savedCount)}" class="count-input keg-total-input w-20 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);" inputmode="decimal" step="any">`;
+            const entryRowClass = stacked
+                ? 'flex items-center justify-between gap-2'
+                : 'flex flex-wrap items-center justify-end gap-2';
             return `
-                <div class="keg-weight-field">
-                    <div class="flex items-center ${showLabel ? 'justify-between' : 'justify-end'} gap-2">
-                        ${label}
-                        <input type="number" id="${escapeHtml(inputId)}" data-product-id="${escapeHtml(product.id)}" data-location-id="${escapeHtml(locationId)}" data-day="${currentDay}" value="${escapeHtml(draft)}" class="keg-weight-input w-24 p-1 border rounded-md text-right" style="background-color: var(--bg-tertiary); border-color: var(--border-color);" inputmode="decimal" step="0.1" min="0" placeholder="0.0" aria-describedby="${escapeHtml(previewId)}" autocomplete="off">
+                <div class="keg-line${stacked ? ' space-y-3' : ''}">
+                    <div class="keg-weight-field">
+                        <div class="${entryRowClass}">
+                            ${entryLabel}
+                            <div class="flex items-center gap-2">
+                                ${entry}
+                                ${addButton}
+                            </div>
+                            ${stacked ? '' : `<div class="flex items-center gap-2">${total}</div>`}
+                        </div>
+                        ${preview}
                     </div>
-                    <p id="${escapeHtml(previewId)}" class="keg-weight-preview text-xs text-right mt-1 ml-auto max-w-[16rem]" style="color: var(--text-secondary);">${escapeHtml(result.text)}</p>
+                    ${stacked ? `<div class="flex items-center justify-between gap-2">${total}</div>` : ''}
                 </div>`;
         }
 
@@ -546,7 +571,7 @@
         function captureInputFocus() {
             const el = document.activeElement;
             if (!el || el.tagName !== 'INPUT' || !el.id) return null;
-            if (!el.classList.contains('count-input') && !el.classList.contains('keg-weight-input')) return null;
+            if (!el.classList.contains('count-input') && !el.classList.contains('keg-weight-input') && !el.classList.contains('keg-add-input')) return null;
             return { id: el.id, start: el.selectionStart, end: el.selectionEnd };
         }
 
@@ -675,7 +700,7 @@
             bar.style.borderColor = 'var(--border-color)';
             bar.innerHTML = `
                 <p class="font-semibold">${escapeHtml(spec.label)}</p>
-                <p class="text-sm" style="color: var(--text-secondary);">Empty keg ${formatAmount(spec.emptyKg)}kg. Litres are divided by ${spec.capacity} to get kegs.</p>`;
+                <p class="text-sm" style="color: var(--text-secondary);">Empty keg ${formatAmount(spec.emptyKg)}kg. Litres ÷ ${spec.capacity}, then + adds that keg to the total.</p>`;
             return bar;
         }
 
@@ -686,7 +711,6 @@
             const kegBar = spec ? renderKegEntryBar(product) : null;
             if (kegBar) container.appendChild(kegBar);
 
-            const weigh = spec && getKegInputMode() === 'weight';
             const standardContainer = document.createElement('div');
             standardContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
             locations.forEach(location => {
@@ -695,8 +719,8 @@
                 locationEl.className = 'rounded-lg shadow p-6 border';
                 locationEl.style.backgroundColor = 'var(--bg-secondary)';
                 locationEl.style.borderColor = 'var(--border-color)';
-                const control = weigh
-                    ? weightCountInputHtml(product, location.id, count, { showLabel: true })
+                const control = spec
+                    ? kegLineControlHtml(product, location.id, count, { stacked: true })
                     : `
                     <div class="flex items-center justify-between">
                         <label for="${location.id}-${product.id}" class="text-sm">Count</label>
@@ -733,11 +757,9 @@
                     `;
                 } else {
                     const weigh = getKegInputMode() === 'weight';
-                    const inputId = weigh ? `w-${selectedRoomId}-${product.id}` : `${selectedRoomId}-${product.id}`;
+                    const inputId = weigh ? `w-${selectedRoomId}-${product.id}` : `add-${selectedRoomId}-${product.id}`;
                     productRow.className = 'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between';
-                    const control = weigh
-                        ? weightCountInputHtml(product, selectedRoomId, count, { showLabel: false })
-                        : numberCountInputHtml(product.id, selectedRoomId, count);
+                    const control = kegLineControlHtml(product, selectedRoomId, count, { stacked: false });
                     productRow.innerHTML = `
                         <div class="min-w-0">
                             <label for="${escapeHtml(inputId)}" class="text-sm">${escapeHtml(product.name)}</label>
@@ -1344,6 +1366,7 @@
                 if (target.classList.contains('nav-button')) handleNavClick(target);
                 if (target.classList.contains('input-mode-btn')) handleInputModeChange(target);
                 if (target.classList.contains('keg-mode-btn')) handleKegModeChange(target);
+                if (target.classList.contains('keg-add-btn')) handleKegAdd(target);
             });
 
             document.body.addEventListener('click', (e) => {
@@ -1416,6 +1439,14 @@
                 processOcrImage(file);
             });
 
+            document.body.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter') return;
+                if (!e.target.classList?.contains('keg-add-input') && !e.target.classList?.contains('keg-weight-input')) return;
+                e.preventDefault();
+                const button = e.target.closest('.keg-line')?.querySelector('.keg-add-btn');
+                if (button) handleKegAdd(button);
+            });
+
             document.body.addEventListener('keyup', (e) => {
                 if (e.target.id === 'new-product-name' && e.key === 'Enter') handleAddProduct();
                 if (e.target.id === 'password-input' && e.key === 'Enter') document.getElementById('login-submit').click();
@@ -1423,11 +1454,14 @@
 
             document.body.addEventListener('input', (e) => {
                 if (e.target.classList.contains('keg-weight-input')) updateKegWeightPreview(e.target);
+                if (e.target.classList.contains('keg-add-input')) {
+                    const day = e.target.dataset.day || currentDay;
+                    kegAddDrafts[kegDraftKey(e.target.dataset.productId, e.target.dataset.locationId, day)] = e.target.value;
+                }
             });
 
             document.body.addEventListener('input', debounce((e) => {
                 if (e.target.classList.contains('count-input')) handleCountChange(e);
-                if (e.target.classList.contains('keg-weight-input')) handleKegWeightChange(e);
                 if (e.target.classList.contains('opening-stock-input')) handleOpeningStockChange(e);
             }, 1500));
             
@@ -1567,23 +1601,53 @@
             const { productId, locationId } = e.target.dataset;
             const day = e.target.dataset.day || currentDay;
             const value = e.target.value;
-            if (!productId || !locationId) return;
-            clearKegDraftsForProduct(productId, day);
+            if (!productId || !locationId || !e.target.isConnected) return;
             const countRef = doc(db, 'counts', productId);
             await setDoc(countRef, { [day]: { [locationId]: Number(value) || 0 } }, { merge: true });
         }
 
-        async function handleKegWeightChange(e) {
-            const { productId, locationId } = e.target.dataset;
-            const day = e.target.dataset.day || currentDay;
+        async function handleKegAdd(button) {
+            const line = button.closest('.keg-line');
+            const productId = button.dataset.productId;
+            const locationId = button.dataset.locationId;
+            const day = button.dataset.day || currentDay;
             const product = products.find((p) => p.id === productId);
             const spec = product ? getKegSpec(product.name) : null;
-            if (!spec || !productId || !locationId) return;
-            kegWeightDrafts[kegDraftKey(productId, locationId, day)] = e.target.value;
-            const result = kegWeightResult(e.target.value, spec);
-            if (result.count === null) return;
+            const entry = line?.querySelector('.keg-weight-input, .keg-add-input');
+            if (!spec || !entry || !productId || !locationId) return;
+
+            let addition = null;
+            if (entry.classList.contains('keg-weight-input')) {
+                const result = kegWeightResult(entry.value, spec);
+                if (result.count === null) return;
+                addition = result.count;
+            } else {
+                const raw = String(entry.value ?? '').trim();
+                if (raw === '') return;
+                const amount = Number(raw);
+                if (!Number.isFinite(amount)) return;
+                addition = amount;
+            }
+
+            const totalInput = line.querySelector('.keg-total-input');
+            const typedTotal = totalInput && String(totalInput.value).trim() !== '' ? Number(totalInput.value) : null;
+            const current = Number.isFinite(typedTotal)
+                ? typedTotal
+                : (Number(counts[productId]?.[day]?.[locationId]) || 0);
+            const total = Math.max(0, roundHundredth(current + addition));
+            if (!counts[productId]) counts[productId] = {};
+            counts[productId][day] = { ...(counts[productId][day] || {}), [locationId]: total };
+
+            const draftKey = kegDraftKey(productId, locationId, day);
+            delete kegWeightDrafts[draftKey];
+            delete kegAddDrafts[draftKey];
+            entry.value = '';
+            if (entry.classList.contains('keg-weight-input')) updateKegWeightPreview(entry);
+            if (totalInput) totalInput.value = total;
+            entry.focus();
+
             const countRef = doc(db, 'counts', productId);
-            await setDoc(countRef, { [day]: { [locationId]: result.count } }, { merge: true });
+            await setDoc(countRef, { [day]: { [locationId]: total } }, { merge: true });
         }
 
         async function handleOpeningStockChange(e) {
