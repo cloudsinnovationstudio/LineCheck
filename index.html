@@ -551,15 +551,33 @@
                     selectedProductId = products[0].id;
                     inputMode = 'byProduct';
                 }
-                render();
+                scheduleRender();
             }, (err) => console.error("Product listener error:", err));
-            
+
             onSnapshot(collection(db, "counts"), (snapshot) => {
                 counts = {};
                 snapshot.docs.forEach(doc => { counts[doc.id] = doc.data(); });
-                render();
+                scheduleRender();
             }, (err) => console.error("Counts listener error:", err));
         }
+
+        // Re-rendering replaces the input elements, which closes the mobile keyboard.
+        // While a number box is focused, hold the render until focus leaves all boxes.
+        let renderPending = false;
+        function isEditingNumberInput() {
+            const el = document.activeElement;
+            return !!el && el.tagName === 'INPUT' && el.type === 'number';
+        }
+        function scheduleRender() {
+            if (isEditingNumberInput()) { renderPending = true; return; }
+            renderPending = false;
+            render();
+        }
+        document.addEventListener('focusout', () => {
+            if (!renderPending) return;
+            // Wait a beat so tapping "Next" into another box doesn't count as leaving.
+            setTimeout(() => { if (renderPending && !isEditingNumberInput()) scheduleRender(); }, 150);
+        });
 
         function expectedViewElementId(view) {
             return `${view}-view`;
@@ -1462,10 +1480,21 @@
                 }
             });
 
-            document.body.addEventListener('input', debounce((e) => {
-                if (e.target.classList.contains('count-input')) handleCountChange(e);
-                if (e.target.classList.contains('opening-stock-input')) handleOpeningStockChange(e);
-            }, 1500));
+            // One save timer per box, so moving to the next box doesn't cancel the previous save.
+            const saveTimers = new Map();
+            document.body.addEventListener('input', (e) => {
+                const t = e.target;
+                const isCount = t.classList.contains('count-input');
+                const isOpening = t.classList.contains('opening-stock-input');
+                if (!isCount && !isOpening) return;
+                const key = t.id || `${t.dataset.productId}|${t.dataset.locationId}|${t.dataset.day}`;
+                clearTimeout(saveTimers.get(key));
+                saveTimers.set(key, setTimeout(() => {
+                    saveTimers.delete(key);
+                    if (isCount) handleCountChange({ target: t });
+                    if (isOpening) handleOpeningStockChange({ target: t });
+                }, 1500));
+            });
             
             document.body.addEventListener('focusin', (e) => {
                 if (e.target.tagName === 'INPUT' && e.target.type === 'number') {
