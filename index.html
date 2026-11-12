@@ -277,6 +277,9 @@
         let currentView = 'input';
         let viewPageMode = 'daily';
         let viewRoomsMode = false;
+        let viewGraphMode = false;
+        let graphProductId = null;
+        let graphByRoom = false;
         let inputMode = 'byProduct';
         let selectedProductId = null;
         let selectedRoomId = null;
@@ -823,12 +826,30 @@
             roomsBtn.style.backgroundColor = 'var(--accent-color)';
             roomsBtn.textContent = viewRoomsMode ? 'Hide rooms' : 'Rooms';
 
+            const graphBtn = document.createElement('button');
+            graphBtn.id = 'toggle-graph-mode-btn';
+            graphBtn.className = 'text-white px-4 py-2 rounded-md shadow';
+            graphBtn.style.backgroundColor = 'var(--accent-color)';
+            graphBtn.textContent = viewGraphMode ? 'Hide graph' : 'Graph';
+
+            if (viewGraphMode) {
+                const title = document.createElement('h2');
+                title.className = 'text-xl font-bold';
+                title.textContent = 'Weekly Trend';
+                controls.appendChild(title);
+                buttonGroup.appendChild(graphBtn);
+                controls.appendChild(buttonGroup);
+                renderTrendGraph(content);
+                return;
+            }
+
             if (viewRoomsMode) {
                 const title = document.createElement('h2');
                 title.className = 'text-xl font-bold';
                 title.textContent = 'Rooms Breakdown';
                 controls.appendChild(title);
                 buttonGroup.appendChild(roomsBtn);
+                buttonGroup.appendChild(graphBtn);
                 controls.appendChild(buttonGroup);
                 renderRoomsBreakdown(content);
                 return;
@@ -856,8 +877,95 @@
                 renderWeeklySummary(content);
             }
             buttonGroup.appendChild(roomsBtn);
+            buttonGroup.appendChild(graphBtn);
             buttonGroup.appendChild(toggleBtn);
             controls.appendChild(buttonGroup);
+        }
+
+        // Monday-Sunday line chart for one product: weekly total, or one line per room.
+        function renderTrendGraph(container) {
+            container.innerHTML = '';
+            if (products.length === 0) {
+                container.innerHTML = '<p>No products yet.</p>';
+                return;
+            }
+            if (!products.some((p) => p.id === graphProductId)) graphProductId = products[0].id;
+            const product = products.find((p) => p.id === graphProductId);
+
+            const controlsRow = document.createElement('div');
+            controlsRow.className = 'flex flex-wrap items-center gap-3 mb-4';
+            controlsRow.innerHTML = `
+                <label for="graph-product-select" class="font-semibold">Product:</label>
+                <select id="graph-product-select" class="p-2 border rounded-md flex-grow sm:flex-grow-0" style="background-color: var(--bg-tertiary); border-color: var(--border-color);"></select>
+                <label class="flex items-center gap-2"><input type="checkbox" id="graph-by-room" ${graphByRoom ? 'checked' : ''}> Split by room</label>`;
+            const select = controlsRow.querySelector('select');
+            products.forEach((p) => select.add(new Option(p.name, p.id)));
+            select.value = graphProductId;
+            container.appendChild(controlsRow);
+
+            const recorded = (day) => counts[product.id]?.[day] !== undefined;
+            const series = graphByRoom
+                ? locations.map((loc, i) => ({
+                    name: loc.name,
+                    color: `hsl(${Math.round((i * 360) / locations.length)} 70% 55%)`,
+                    values: days.map((d) => (recorded(d) ? getLocationCount(product.id, d, loc.id) : null))
+                }))
+                : [{
+                    name: 'Total',
+                    color: 'var(--accent-color)',
+                    values: days.map((d) => (recorded(d) ? calculateProductTotal(product.id, d) : null))
+                }];
+
+            const all = series.flatMap((s) => s.values).filter((v) => v !== null);
+            if (all.length === 0) {
+                const msg = document.createElement('p');
+                msg.style.color = 'var(--text-secondary)';
+                msg.textContent = `No counts recorded for ${product.name} this week.`;
+                container.appendChild(msg);
+                return;
+            }
+
+            const W = 640, H = 300, L = 44, R = 14, T = 14, B = 30;
+            const rawMax = Math.max(...all, 1);
+            const mag = Math.pow(10, Math.floor(Math.log10(rawMax / 5)));
+            const step = [1, 2, 5, 10].map((m) => m * mag).find((s) => rawMax / s <= 5);
+            const yMax = Math.ceil(rawMax / step) * step;
+            const x = (i) => L + (i * (W - L - R)) / (days.length - 1);
+            const y = (v) => T + (H - T - B) * (1 - v / yMax);
+
+            let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Weekly trend for ${escapeHtml(product.name)}">`;
+            for (let v = 0; v <= yMax + 1e-9; v += step) {
+                svg += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--border-color)" stroke-width="1"/>`;
+                svg += `<text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--text-secondary)">${formatCount(v).replace(/\.0$/, '')}</text>`;
+            }
+            days.forEach((d, i) => {
+                const isToday = d === currentDay;
+                svg += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="12" ${isToday ? 'font-weight="700"' : ''} fill="${isToday ? 'var(--text-primary)' : 'var(--text-secondary)'}">${d.slice(0, 3).toUpperCase()}</text>`;
+            });
+            series.forEach((s) => {
+                let path = '';
+                s.values.forEach((v, i) => {
+                    if (v === null) return;
+                    path += `${s.values[i - 1] === null || i === 0 ? 'M' : 'L'}${x(i)},${y(v)} `;
+                });
+                svg += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+                s.values.forEach((v, i) => {
+                    if (v === null) return;
+                    svg += `<circle cx="${x(i)}" cy="${y(v)}" r="4" fill="${s.color}"><title>${escapeHtml(s.name)} - ${days[i]}: ${formatCount(v)}</title></circle>`;
+                });
+            });
+            svg += '</svg>';
+
+            const chart = document.createElement('div');
+            chart.innerHTML = svg;
+            container.appendChild(chart);
+
+            if (graphByRoom) {
+                const legend = document.createElement('div');
+                legend.className = 'flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm';
+                legend.innerHTML = series.map((s) => `<span class="flex items-center gap-1"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${s.color}"></span>${escapeHtml(s.name)}</span>`).join('');
+                container.appendChild(legend);
+            }
         }
 
         function getLocationCount(productId, day, locationId) {
@@ -1376,6 +1484,7 @@
                 if (target.id === 'theme-toggle') toggleTheme();
                 if (target.id === 'toggle-view-mode-btn') handleToggleViewMode();
                 if (target.id === 'toggle-rooms-mode-btn') handleToggleRoomsMode();
+                if (target.id === 'toggle-graph-mode-btn') handleToggleGraphMode();
                 if (target.classList.contains('delete-product-btn')) handleDeleteProduct(target);
                 if (target.id === 'add-product-btn') handleAddProduct();
                 if (target.id === 'ocr-upload-btn') {
@@ -1478,6 +1587,11 @@
                     const day = e.target.dataset.day || currentDay;
                     kegAddDrafts[kegDraftKey(e.target.dataset.productId, e.target.dataset.locationId, day)] = e.target.value;
                 }
+            });
+
+            document.body.addEventListener('change', (e) => {
+                if (e.target.id === 'graph-product-select') { graphProductId = e.target.value; render(); }
+                if (e.target.id === 'graph-by-room') { graphByRoom = e.target.checked; render(); }
             });
 
             // One save timer per box, so moving to the next box doesn't cancel the previous save.
@@ -1586,7 +1700,8 @@
             render();
         }
         function handleToggleViewMode() { viewPageMode = viewPageMode === 'daily' ? 'weekly' : 'daily'; render(); }
-        function handleToggleRoomsMode() { viewRoomsMode = !viewRoomsMode; render(); }
+        function handleToggleRoomsMode() { viewRoomsMode = !viewRoomsMode; viewGraphMode = false; render(); }
+        function handleToggleGraphMode() { viewGraphMode = !viewGraphMode; if (viewGraphMode) viewRoomsMode = false; render(); }
         function handleNavClick(target) { 
             if (target.dataset.view === 'input') {
                 currentDay = days[(new Date().getDay() + 6) % 7];
